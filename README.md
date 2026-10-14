@@ -11,13 +11,26 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"            # extras: .[samsung] .[lg]
 mkdir -p data/homes && cp -r examples/homes/casa data/homes/casa
 
-export ANTHROPIC_API_KEY=...        # para o agente de linguagem natural
-export SMARTTHINGS_TOKEN=...        # opcional: https://account.smartthings.com/tokens
+cp .env.example .env                # e preencha as chaves (veja abaixo)
 
 uvicorn smarthome.api:app --reload  # app em http://localhost:8000, API em /docs
 python -m smarthome.cli             # conversar com a central pelo terminal
 pytest                              # testes
 ```
+
+## Chaves
+
+A central lê as chaves de um arquivo `.env` na pasta de onde ela é iniciada
+(modelo em `.env.example`). O `.env` está no `.gitignore` e nunca deve ir para
+o git. Variáveis já definidas no ambiente têm prioridade sobre o arquivo.
+
+- **`ANTHROPIC_API_KEY`** (agente de voz e texto): entre em
+  https://console.anthropic.com, crie uma chave em *Settings > API Keys* e cole
+  no `.env`. O uso é cobrado por consumo na conta da Anthropic; vale definir um
+  limite de gasto mensal em *Settings > Limits*. Sem a chave, os botões do app
+  funcionam e só os pedidos em linguagem natural ficam indisponíveis.
+- **`SMARTTHINGS_TOKEN`** (opcional): crie em
+  https://account.smartthings.com/tokens com acesso a dispositivos.
 
 ## App e voz
 

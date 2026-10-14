@@ -23,3 +23,16 @@ def test_home_folder_defines_hub(tmp_path, monkeypatch):
 def test_missing_home_gets_defaults(tmp_path):
     home = load_home("nova", data_dir=tmp_path)
     assert home.name == "nova" and "virtual" in home.adapters
+
+
+def test_env_file_is_loaded_without_overriding(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("ST_DOTENV=do-arquivo\nST_JA_DEFINIDA=do-arquivo\n")
+    monkeypatch.delenv("ST_DOTENV", raising=False)
+    monkeypatch.setenv("ST_JA_DEFINIDA", "do-ambiente")
+    build_hub("x", data_dir=tmp_path)
+    import os
+
+    assert os.environ["ST_DOTENV"] == "do-arquivo"
+    assert os.environ["ST_JA_DEFINIDA"] == "do-ambiente"
+    monkeypatch.delenv("ST_DOTENV")
