@@ -14,10 +14,31 @@ mkdir -p data/homes && cp -r examples/homes/casa data/homes/casa
 export ANTHROPIC_API_KEY=...        # para o agente de linguagem natural
 export SMARTTHINGS_TOKEN=...        # opcional: https://account.smartthings.com/tokens
 
-uvicorn smarthome.api:app --reload  # API em http://localhost:8000/docs
+uvicorn smarthome.api:app --reload  # app em http://localhost:8000, API em /docs
 python -m smarthome.cli             # conversar com a central pelo terminal
 pytest                              # testes
 ```
+
+## App e voz
+
+Abra http://localhost:8000 no navegador: os dispositivos aparecem por cômodo,
+com liga/desliga, brilho, temperatura, modo do ar, volume e apps da TV. O
+campo do topo aceita pedidos em português, digitados ou falados pelo botão do
+microfone; a resposta aparece na tela e é falada. Dá para instalar na tela
+inicial do celular ("Adicionar à tela de início").
+
+O microfone do navegador só funciona em `localhost` ou com HTTPS. Para usar no
+celular pela rede de casa, gere um certificado local com
+[mkcert](https://github.com/FiloSottile/mkcert) e suba a central com ele:
+
+```bash
+mkcert -install && mkcert -key-file tokens/key.pem -cert-file tokens/cert.pem 192.168.0.10 central.local
+uvicorn smarthome.api:app --host 0.0.0.0 --ssl-keyfile tokens/key.pem --ssl-certfile tokens/cert.pem
+```
+
+Troque `192.168.0.10` pelo IP do computador da central e abra
+`https://192.168.0.10:8000` no celular. Para o celular confiar no certificado,
+instale nele a CA do mkcert (`mkcert -CAROOT` mostra onde ela fica).
 
 ## Exemplos
 

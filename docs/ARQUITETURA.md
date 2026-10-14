@@ -38,6 +38,7 @@ fabricante novo basta escrever um adaptador.
 | Adaptadores | `src/smarthome/adapters/` | SmartThings, Samsung, LG, virtual |
 | Agente | `src/smarthome/agent.py` | Entende pedidos em português e usa o Hub via ferramentas |
 | API | `src/smarthome/api.py` | REST para o app, a voz e a Alexa |
+| App web | `src/smarthome/web/` | Tela por cômodo, voz no navegador, cadastro; servida pela própria API |
 
 ## Pensada para várias casas
 
@@ -93,12 +94,17 @@ sequência funcionam. O agente só diz que fez algo quando a ferramenta confirmo
 
 ## Voz
 
-Fase 2. Dois caminhos, que podem conviver:
+Três caminhos, que convivem porque todos terminam em `POST /agent`:
 
-1. **Voz local:** palavra de ativação (openWakeWord) + transcrição (Whisper)
-   + síntese de fala (Piper), num Raspberry Pi ou mini PC com microfone. O texto
-   transcrito vai para `POST /agent`; a resposta volta em fala.
-2. **Pelos Echo da Alexa:** ver abaixo.
+1. **No app (pronto na fase 2):** o botão do microfone usa o reconhecimento
+   de voz do próprio navegador em pt-BR, manda o texto ao agente e lê a
+   resposta em voz alta. Não precisa de hardware extra; exige HTTPS fora do
+   `localhost` (ver README).
+2. **Satélite sempre ouvindo (próximo passo):** palavra de ativação
+   (openWakeWord) + transcrição (Whisper) + síntese de fala (Piper), num
+   Raspberry Pi ou mini PC com microfone em cada ambiente. Tudo local, sem
+   depender do navegador.
+3. **Pelos Echo da Alexa:** ver abaixo.
 
 ## Alexa
 
@@ -124,7 +130,8 @@ o app Alexa de fato, isso exigiria automação de navegador e fica para avaliar.
 
 1. **Fase 1 (este PR):** núcleo, pasta por casa, cadastro, adaptadores SmartThings/Samsung/LG,
    API REST, agente por texto, testes.
-2. **Fase 2:** voz local e um app web simples (lista por cômodo, botões).
+2. **Fase 2:** app web (por cômodo, controles, cadastro, instalável no
+   celular) com voz no navegador. Depois, o satélite de voz sempre ouvindo.
 3. **Fase 3:** Smart Home Skill da Alexa e acesso externo seguro.
 4. **Fase 4:** cenas e rotinas ("modo cinema", "boa noite"), mais adaptadores.
 
