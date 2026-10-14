@@ -8,11 +8,14 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .adapters.base import Adapter, AdapterError
 from .models import Command, CommandResult, Device, DeviceState, DeviceType, DiscoveredDevice
 from .registry import DeviceRegistry
+
+if TYPE_CHECKING:
+    from .config import HomeConfig
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +27,12 @@ def slugify(text: str) -> str:
 
 
 class Hub:
-    def __init__(self, registry: DeviceRegistry, adapters: list[Adapter]) -> None:
+    """A central de uma casa. Cada casa tem seu Hub, cadastro e credenciais."""
+
+    def __init__(
+        self, registry: DeviceRegistry, adapters: list[Adapter], home: HomeConfig | None = None
+    ) -> None:
+        self.home = home
         self.registry = registry
         self.adapters = {a.name: a for a in adapters}
 

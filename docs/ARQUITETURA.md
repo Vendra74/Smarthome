@@ -13,7 +13,7 @@
                     \                  /
                      +------ Hub ------+
                             |
-                  Cadastro de dispositivos (YAML)
+                  Casa: home.yaml + devices.yaml
                             |
    +-------------+--------------+-------------+-----------+
    | SmartThings | TV Samsung   | TV LG       | Virtual   |  <- adaptadores
@@ -32,11 +32,38 @@ fabricante novo basta escrever um adaptador.
 | Peça | Arquivo | Papel |
 |---|---|---|
 | Modelo | `src/smarthome/models.py` | Dispositivo, tipo, comandos, estado |
+| Casa | `src/smarthome/config.py` | Carrega a pasta da casa e monta o Hub dela |
 | Cadastro | `src/smarthome/registry.py` | Lista de dispositivos com cômodo e apelidos, salva em YAML |
 | Hub | `src/smarthome/hub.py` | Valida e despacha comandos, descobre e cadastra dispositivos |
 | Adaptadores | `src/smarthome/adapters/` | SmartThings, Samsung, LG, virtual |
 | Agente | `src/smarthome/agent.py` | Entende pedidos em português e usa o Hub via ferramentas |
 | API | `src/smarthome/api.py` | REST para o app, a voz e a Alexa |
+
+## Pensada para várias casas
+
+A casa do Andre é o caso de referência, mas o objetivo é virar um app usado
+em outras casas. Por isso, desde já:
+
+- **Nada da casa no código.** Cômodos, dispositivos e integrações ficam em
+  `data/homes/<id>/home.yaml` e `devices.yaml`. Uma casa nova é uma pasta nova
+  (exemplo em `examples/homes/casa`).
+- **Um Hub por casa.** Cada casa tem seu cadastro, seus adaptadores e suas
+  credenciais (o `home.yaml` diz de qual variável vem o token do SmartThings).
+- **Cadastro pelo próprio app ou por voz.** O usuário final não edita YAML: a
+  descoberta (`/discover`) e o cadastro por conversa já existem para isso.
+
+Para virar produto, o caminho previsto é:
+
+1. **Instalação local por casa** (hoje): um mini PC ou Raspberry Pi na rede de
+   cada casa roda a central. Isso é necessário de qualquer forma, porque TVs
+   e Wake-on-LAN só são alcançáveis de dentro da rede local.
+2. **Nuvem de contas:** login do usuário, casas por conta, membros da família
+   com permissões, e a central local se conecta à nuvem por um túnel de saída
+   (sem abrir porta no roteador). App e Alexa falam com a nuvem, que repassa
+   para a central da casa certa.
+3. **Banco de dados** no lugar dos YAML quando houver muitas casas; a
+   interface do cadastro (`DeviceRegistry`) já isola essa troca.
+4. **OAuth por casa** com SmartThings e Alexa, em vez de token pessoal.
 
 ## Como cada fabricante entra
 
@@ -95,7 +122,7 @@ o app Alexa de fato, isso exigiria automação de navegador e fica para avaliar.
 
 ## Roteiro
 
-1. **Fase 1 (este PR):** núcleo, cadastro, adaptadores SmartThings/Samsung/LG,
+1. **Fase 1 (este PR):** núcleo, pasta por casa, cadastro, adaptadores SmartThings/Samsung/LG,
    API REST, agente por texto, testes.
 2. **Fase 2:** voz local e um app web simples (lista por cômodo, botões).
 3. **Fase 3:** Smart Home Skill da Alexa e acesso externo seguro.
@@ -105,4 +132,4 @@ o app Alexa de fato, isso exigiria automação de navegador e fica para avaliar.
 
 - A API não tem autenticação ainda: rode só na rede local até a fase 3.
 - Tokens (SmartThings, chaves de TV) ficam em variáveis de ambiente ou em
-  `config/tokens/`, fora do git.
+  `tokens/`, fora do git.

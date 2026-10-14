@@ -90,3 +90,12 @@ def test_refusal_does_not_poison_history(hub):
     agent = HomeAgent(hub, client=client)
     asyncio.run(agent.handle("algo"))
     assert agent._conversations["default"] == []
+
+
+def test_home_context_in_system_prompt(hub):
+    from smarthome.config import HomeConfig
+
+    hub.home = HomeConfig(id="casa", name="Casa do Andre", rooms=["sala", "quarto"])
+    client = FakeClient([SimpleNamespace(stop_reason="end_turn", content=[text("Oi.")])])
+    asyncio.run(HomeAgent(hub, client=client).handle("oi"))
+    assert "Casa do Andre. Cômodos: sala, quarto." in client.requests[0]["system"]

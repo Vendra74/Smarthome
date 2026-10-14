@@ -36,7 +36,7 @@ class SamsungTVAdapter(Adapter):
         return SamsungTVWS(
             host=device.config["host"],
             port=device.config.get("port", 8002),
-            token_file=device.config.get("token_file", f"config/tokens/{device.id}.token"),
+            token_file=device.config.get("token_file", f"tokens/{device.id}.token"),
             name="Central Casa",
         )
 

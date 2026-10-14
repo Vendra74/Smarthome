@@ -1,5 +1,5 @@
-# Copie para config/devices.yaml e ajuste. Os dispositivos "virtual" servem
-# para testar a central sem hardware.
+# Exemplo da casa de referência. Copie a pasta para data/homes/casa e ajuste.
+# Os dispositivos "virtual" servem para testar a central sem hardware.
 devices:
   - id: luz-sala
     name: Luz da sala

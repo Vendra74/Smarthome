@@ -9,7 +9,7 @@ casa por um app, por voz e pela Alexa. A arquitetura e o roteiro estão em
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"            # extras: .[samsung] .[lg]
-cp config/devices.example.yaml config/devices.yaml
+mkdir -p data/homes && cp -r examples/homes/casa data/homes/casa
 
 export ANTHROPIC_API_KEY=...        # para o agente de linguagem natural
 export SMARTTHINGS_TOKEN=...        # opcional: https://account.smartthings.com/tokens
@@ -34,4 +34,10 @@ curl -X POST localhost:8000/agent \
 curl localhost:8000/discover
 ```
 
-O modelo do agente pode ser trocado com `SMARTHOME_MODEL`.
+## Uma pasta por casa
+
+A casa do Andre é o caso de referência, mas nada dela fica no código. Cada casa
+é uma pasta em `data/homes/<id>/` com `home.yaml` (nome, cômodos, integrações
+ativas) e `devices.yaml` (dispositivos). `SMARTHOME_HOME` escolhe a casa
+(padrão `casa`) e `SMARTHOME_DATA` a pasta base. O modelo do agente pode ser
+trocado com `SMARTHOME_MODEL`.

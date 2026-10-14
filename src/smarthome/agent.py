@@ -107,6 +107,10 @@ class HomeAgent:
     def __init__(self, hub: Hub, client: anthropic.AsyncAnthropic | None = None) -> None:
         self.hub = hub
         self.client = client or anthropic.AsyncAnthropic()
+        self.system = SYSTEM_PROMPT
+        if hub.home:
+            rooms = ", ".join(hub.home.rooms) or "não informados"
+            self.system += f"\n\nCasa: {hub.home.name}. Cômodos: {rooms}."
         self._conversations: dict[str, list[dict[str, Any]]] = {}
 
     async def _run_tool(self, name: str, args: dict[str, Any]) -> Any:
@@ -163,7 +167,7 @@ class HomeAgent:
             response = await self.client.beta.messages.create(
                 model=MODEL,
                 max_tokens=16000,
-                system=SYSTEM_PROMPT,
+                system=self.system,
                 tools=TOOLS,
                 messages=messages,
                 thinking={"type": "adaptive"},

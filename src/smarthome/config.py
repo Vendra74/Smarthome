@@ -1,9 +1,21 @@
-"""Monta a central a partir de variáveis de ambiente."""
+"""Monta a central de uma casa.
+
+Cada casa tem sua pasta, com a descrição da casa e o cadastro de dispositivos:
+
+    data/homes/<home_id>/home.yaml
+    data/homes/<home_id>/devices.yaml
+
+Nada específico de uma casa fica no código. Hoje a central roda uma casa por
+processo (SMARTHOME_HOME); o mesmo formato serve para várias casas no futuro.
+"""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+
+import yaml
+from pydantic import BaseModel, Field
 
 from .adapters.base import Adapter
 from .adapters.lg_tv import LGTVAdapter
@@ -14,9 +26,44 @@ from .hub import Hub
 from .registry import DeviceRegistry
 
 
-def build_hub() -> Hub:
-    path = Path(os.environ.get("SMARTHOME_DEVICES", "config/devices.yaml"))
-    adapters: list[Adapter] = [VirtualAdapter(), SamsungTVAdapter(), LGTVAdapter()]
-    if token := os.environ.get("SMARTTHINGS_TOKEN"):
+class SmartThingsConfig(BaseModel):
+    # O token nunca fica no arquivo: o arquivo diz de qual variável de ambiente lê-lo.
+    token_env: str = "SMARTTHINGS_TOKEN"
+
+
+class HomeConfig(BaseModel):
+    id: str
+    name: str
+    rooms: list[str] = Field(default_factory=list)
+    adapters: list[str] = Field(default_factory=lambda: ["virtual", "samsung_tv", "lg_tv", "smartthings"])
+    smartthings: SmartThingsConfig = Field(default_factory=SmartThingsConfig)
+
+
+def home_dir(home_id: str, data_dir: Path | None = None) -> Path:
+    base = data_dir or Path(os.environ.get("SMARTHOME_DATA", "data"))
+    return base / "homes" / home_id
+
+
+def load_home(home_id: str, data_dir: Path | None = None) -> HomeConfig:
+    path = home_dir(home_id, data_dir) / "home.yaml"
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    return HomeConfig.model_validate({"id": home_id, "name": home_id, **(raw or {})})
+
+
+def build_adapters(home: HomeConfig) -> list[Adapter]:
+    adapters: list[Adapter] = []
+    if "virtual" in home.adapters:
+        adapters.append(VirtualAdapter())
+    if "samsung_tv" in home.adapters:
+        adapters.append(SamsungTVAdapter())
+    if "lg_tv" in home.adapters:
+        adapters.append(LGTVAdapter())
+    if "smartthings" in home.adapters and (token := os.environ.get(home.smartthings.token_env)):
         adapters.append(SmartThingsAdapter(token))
-    return Hub(DeviceRegistry(path), adapters)
+    return adapters
+
+
+def build_hub(home_id: str | None = None, data_dir: Path | None = None) -> Hub:
+    home = load_home(home_id or os.environ.get("SMARTHOME_HOME", "casa"), data_dir)
+    registry = DeviceRegistry(home_dir(home.id, data_dir) / "devices.yaml")
+    return Hub(registry, build_adapters(home), home=home)
