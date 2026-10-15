@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import certifi
 import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -97,6 +98,9 @@ def build_hub(home_id: str | None = None, data_dir: Path | None = None) -> Hub:
     # Chaves (ANTHROPIC_API_KEY, SMARTTHINGS_TOKEN...) podem vir de um .env na pasta
     # de onde a central é iniciada; variáveis já definidas no ambiente têm prioridade.
     load_dotenv(Path(".env"), override=False)
+    # No macOS o Python do python.org/Homebrew não acha os certificados raiz do sistema;
+    # apontar para o certifi vale para todas as bibliotecas (aiohttp, websockets...).
+    os.environ.setdefault("SSL_CERT_FILE", certifi.where())
     home = load_home(home_id or os.environ.get("SMARTHOME_HOME", "casa"), data_dir)
     registry = DeviceRegistry(home_dir(home.id, data_dir) / "devices.yaml")
     hub = Hub(registry, build_adapters(home), home=home)
