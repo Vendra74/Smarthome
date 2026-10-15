@@ -57,9 +57,22 @@ WEB_DIR = Path(__file__).parent / "web"
 log = logging.getLogger(__name__)
 
 
+def _setup_logging() -> None:
+    """Mostra as linhas INFO da central (comandos, busca na rede) junto com as do uvicorn."""
+    root = logging.getLogger("smarthome")
+    if root.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+    root.propagate = False
+
+
 def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        _setup_logging()
         app.state.hub = hub or build_hub()
         app.state.agent = agent
         yield

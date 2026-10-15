@@ -8,6 +8,7 @@ e também TVs Samsung. Autenticação por Personal Access Token
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -17,6 +18,12 @@ from .base import Adapter, AdapterError, DeviceUnreachable
 
 API_URL = "https://api.smartthings.com/v1"
 log = logging.getLogger(__name__)
+
+# A SmartThings limita a ~10 consultas por minuto por aparelho (429). Com o app
+# atualizando a cada 15 s em mais de uma tela, estoura; por isso o estado é
+# guardado por um tempo e a saúde é consultada bem menos.
+STATE_TTL = 20.0
+HEALTH_TTL = 60.0
 
 
 def _to_smartthings(command: Command, params: dict[str, Any]) -> tuple[str, str, list[Any]]:
@@ -75,6 +82,8 @@ class SmartThingsAdapter(Adapter):
             timeout=10.0,
             transport=transport,
         )
+        self._state_cache: dict[str, tuple[float, DeviceState]] = {}
+        self._health_cache: dict[str, tuple[float, bool]] = {}
 
     @staticmethod
     def _external_id(device: Device) -> str:
@@ -94,14 +103,20 @@ class SmartThingsAdapter(Adapter):
             raise AdapterError(f"SmartThings: {exc}") from exc
         return response.json() if response.content else {}
 
-    async def _is_online(self, device: Device) -> bool:
+    async def _is_online(self, device: Device, fresh: bool = False) -> bool:
         """A SmartThings guarda o último estado conhecido mesmo com o aparelho fora do ar;
         só o endpoint de saúde diz se ele está acessível agora."""
+        external_id = self._external_id(device)
+        cached = self._health_cache.get(external_id)
+        if cached and not fresh and time.monotonic() - cached[0] < HEALTH_TTL:
+            return cached[1]
         try:
-            data = await self._request("GET", f"/devices/{self._external_id(device)}/health")
+            data = await self._request("GET", f"/devices/{external_id}/health")
         except AdapterError:
-            return True  # sem resposta de saúde, assume o estado informado
-        return data.get("state", "ONLINE") != "OFFLINE"
+            return cached[1] if cached else True  # sem resposta de saúde, assume o estado informado
+        online = data.get("state", "ONLINE") != "OFFLINE"
+        self._health_cache[external_id] = (time.monotonic(), online)
+        return online
 
     async def execute(self, device: Device, command: Command, params: dict[str, Any]) -> DeviceState:
         capability, st_command, arguments = _to_smartthings(command, params)
@@ -121,7 +136,7 @@ class SmartThingsAdapter(Adapter):
             # 409 é a SmartThings sem conseguir falar com o aparelho agora. O endpoint de saúde
             # costuma confirmar (OFFLINE), mas em TVs Samsung em standby ele ainda diz ONLINE
             # por um tempo; nesse caso o 409 por si só já indica que a TV não respondeu.
-            if "409" in str(exc) and (device.type == DeviceType.TV or not await self._is_online(device)):
+            if "409" in str(exc) and (device.type == DeviceType.TV or not await self._is_online(device, fresh=True)):
                 reason = str(exc).partition("(")[2].rstrip(")")
                 hint = f" (SmartThings: {reason})" if reason else ""
                 raise DeviceUnreachable(
@@ -129,10 +144,21 @@ class SmartThingsAdapter(Adapter):
                     "Para ligar pela rede, ative na TV 'Ligar com dispositivo móvel'."
                 ) from exc
             raise
+        self._state_cache.pop(self._external_id(device), None)
+        self._health_cache.pop(self._external_id(device), None)
         return await self.get_state(device)
 
     async def get_state(self, device: Device) -> DeviceState:
-        data = await self._request("GET", f"/devices/{self._external_id(device)}/status")
+        external_id = self._external_id(device)
+        cached = self._state_cache.get(external_id)
+        if cached and time.monotonic() - cached[0] < STATE_TTL:
+            return cached[1]
+        try:
+            data = await self._request("GET", f"/devices/{external_id}/status")
+        except AdapterError as exc:
+            if "429" in str(exc) and cached:
+                return cached[1]  # limite de consultas: vale o último estado conhecido
+            raise
         main = data.get("components", {}).get(device.config.get("component", "main"), {})
 
         def value(capability: str, attribute: str) -> Any:
@@ -147,12 +173,14 @@ class SmartThingsAdapter(Adapter):
             "volume": value("audioVolume", "volume"),
         }
         online = await self._is_online(device)
-        return DeviceState(
+        state = DeviceState(
             online=online,
             # Fora da rede, o "ligado" guardado pela SmartThings é velho: trata como desligado.
             power=False if not online else None if switch is None else switch == "on",
             attributes={k: v for k, v in attributes.items() if v is not None},
         )
+        self._state_cache[external_id] = (time.monotonic(), state)
+        return state
 
     async def discover(self) -> list[DiscoveredDevice]:
         data = await self._request("GET", "/devices")

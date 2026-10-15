@@ -119,3 +119,27 @@ def test_tv_409_with_health_online_still_gets_a_clear_message():
     tv = Device(id="tv", name="TV da sala", type=DeviceType.TV, adapter="smartthings", config={"device_id": "tv"})
     with pytest.raises(AdapterError, match=r"TV da sala não respondeu.*Device is offline.*Ligar com dispositivo móvel"):
         asyncio.run(adapter.execute(tv, Command.TURN_OFF, {}))
+
+
+def test_state_is_cached_and_survives_rate_limit():
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        if request.url.path.endswith("/health"):
+            return httpx.Response(200, json={"state": "ONLINE"})
+        if len([c for c in calls if c.endswith("/status")]) > 1:
+            return httpx.Response(429, json={"error": {"code": "TooManyRequestError", "message": "Too Many Requests"}})
+        return httpx.Response(200, json={"components": {"main": {"switch": {"switch": {"value": "on"}}}}})
+
+    adapter = SmartThingsAdapter("token", transport=httpx.MockTransport(handler))
+    tv = Device(id="tv", name="TV", type=DeviceType.TV, adapter="smartthings", config={"device_id": "tv"})
+
+    first = asyncio.run(adapter.get_state(tv))
+    second = asyncio.run(adapter.get_state(tv))  # dentro do TTL: nenhuma chamada nova
+    assert first.power is True and second.power is True
+    assert calls == ["/v1/devices/tv/status", "/v1/devices/tv/health"]
+
+    adapter._state_cache["tv"] = (0.0, first)  # força o TTL a vencer
+    third = asyncio.run(adapter.get_state(tv))  # a SmartThings devolve 429: vale o último estado
+    assert third.power is True and calls[-1] == "/v1/devices/tv/status"
