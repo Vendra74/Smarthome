@@ -210,3 +210,7 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; ma
 #discovered p { margin: 0 0 6px; font-size: .9rem; color: var(--muted); }
 .error { color: var(--danger); font-size: .9rem; }
 .tv-fields[hidden] { display: none; }
+#discovered p.integration { font-size: .85rem; margin-bottom: 4px; }
+#discovered p.integration::before { content: "● "; }
+#discovered p.integration.ok::before { color: #3a9a5b; }
+#discovered p.integration.warn { color: var(--danger); }

@@ -60,6 +60,24 @@ def load_home(home_id: str, data_dir: Path | None = None) -> HomeConfig:
     return HomeConfig.model_validate({"id": home_id, "name": home_id, **(raw or {})})
 
 
+CLOUD_INTEGRATIONS = {"smartthings": "SmartThings", "lg_thinq": "LG ThinQ"}
+
+
+def integration_status(home: HomeConfig) -> list[dict[str, str]]:
+    """Situação das integrações de nuvem da casa, para o app explicar o que falta."""
+    out = []
+    for key, label in CLOUD_INTEGRATIONS.items():
+        token_env = getattr(home, key).token_env
+        if key not in home.adapters:
+            status, detail = "off", f"desligada no home.yaml (adicione {key} em adapters)"
+        elif not os.environ.get(token_env):
+            status, detail = "missing_token", f"falta {token_env} no .env"
+        else:
+            status, detail = "active", "conectada"
+        out.append({"id": key, "label": label, "status": status, "detail": detail})
+    return out
+
+
 def build_adapters(home: HomeConfig) -> list[Adapter]:
     adapters: list[Adapter] = []
     if "virtual" in home.adapters:
@@ -81,4 +99,6 @@ def build_hub(home_id: str | None = None, data_dir: Path | None = None) -> Hub:
     load_dotenv(Path(".env"), override=False)
     home = load_home(home_id or os.environ.get("SMARTHOME_HOME", "casa"), data_dir)
     registry = DeviceRegistry(home_dir(home.id, data_dir) / "devices.yaml")
-    return Hub(registry, build_adapters(home), home=home)
+    hub = Hub(registry, build_adapters(home), home=home)
+    hub.integrations = integration_status(home)
+    return hub

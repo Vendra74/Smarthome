@@ -49,3 +49,27 @@ def test_agent_without_key_returns_503(hub, monkeypatch, tmp_path):
     with TestClient(create_app(hub=hub)) as client:
         r = client.post("/agent", json={"text": "acende a luz"})
         assert r.status_code == 503 and "ANTHROPIC_API_KEY" in r.json()["detail"]
+
+
+def test_integrations_report_discovery_errors(hub):
+    from smarthome.adapters.base import Adapter, AdapterError
+
+    class Broken(Adapter):
+        name = "smartthings"
+
+        async def execute(self, device, command, params):
+            raise AdapterError("x")
+
+        async def get_state(self, device):
+            raise AdapterError("x")
+
+        async def discover(self):
+            raise AdapterError("SmartThings: 401 Unauthorized")
+
+    hub.adapters["smartthings"] = Broken()
+    hub.integrations = [{"id": "smartthings", "label": "SmartThings", "status": "active", "detail": "conectada"}]
+    with TestClient(create_app(hub=hub)) as client:
+        assert client.get("/discover").json() == []
+        assert client.get("/integrations").json() == [
+            {"id": "smartthings", "label": "SmartThings", "status": "error", "detail": "SmartThings: 401 Unauthorized"}
+        ]

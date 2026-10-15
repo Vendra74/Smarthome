@@ -42,6 +42,13 @@ class HomeInfo(BaseModel):
     rooms: list[str]
 
 
+class Integration(BaseModel):
+    id: str
+    label: str
+    status: str  # active, off, missing_token, error
+    detail: str
+
+
 class DeviceView(Device):
     state: DeviceState | None = None
 
@@ -105,6 +112,16 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
         if _hub().registry.get(device_id) is None:
             raise HTTPException(404, "Dispositivo não encontrado")
         return await _hub().execute(device_id, body.command, body.params)
+
+    @app.get("/integrations", response_model=list[Integration])
+    async def integrations() -> list[Integration]:
+        out = []
+        for item in _hub().integrations:
+            error = _hub().discovery_errors.get(item["id"])
+            if item["status"] == "active" and error:
+                item = {**item, "status": "error", "detail": error}
+            out.append(Integration(**item))
+        return out
 
     @app.get("/discover", response_model=list[DiscoveredDevice])
     async def discover(adapter: str | None = None) -> list[DiscoveredDevice]:

@@ -34,6 +34,9 @@ class Hub:
     ) -> None:
         self.home = home
         self.registry = registry
+        self.integrations: list[dict[str, str]] = []
+        # Último erro de descoberta por adaptador, para o app mostrar o motivo.
+        self.discovery_errors: dict[str, str] = {}
         self.adapters = {a.name: a for a in adapters}
 
     def _adapter(self, device: Device) -> Adapter:
@@ -82,7 +85,9 @@ class Hub:
                 items = await adapter.discover()
             except AdapterError as exc:
                 log.warning("Descoberta falhou em %s: %s", adapter.name, exc)
+                self.discovery_errors[adapter.name] = str(exc)
                 continue
+            self.discovery_errors.pop(adapter.name, None)
             found.extend(i for i in items if (i.adapter, i.external_id) not in known)
         return found
 

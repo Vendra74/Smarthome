@@ -332,7 +332,22 @@ function setupAddDialog() {
     dialog.showModal();
     try {
       const found = await api("/discover");
-      if (!found.length) return;
+      const integrations = await api("/integrations").catch(() => []);
+      // Explica por que uma integração não trouxe nada (desligada, sem token, erro).
+      for (const item of integrations) {
+        const line = document.createElement("p");
+        line.className = item.status === "active" ? "integration ok" : "integration warn";
+        line.textContent = `${item.label}: ${item.detail}`;
+        list.append(line);
+      }
+      if (!found.length) {
+        if (integrations.some((i) => i.status === "active")) {
+          const none = document.createElement("p");
+          none.textContent = "Nenhum aparelho novo encontrado nas integrações conectadas.";
+          list.append(none);
+        }
+        return;
+      }
       const intro = document.createElement("p");
       intro.textContent = "Encontrados nas suas integrações:";
       list.append(

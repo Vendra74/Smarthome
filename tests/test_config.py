@@ -36,3 +36,18 @@ def test_env_file_is_loaded_without_overriding(tmp_path, monkeypatch):
     assert os.environ["ST_DOTENV"] == "do-arquivo"
     assert os.environ["ST_JA_DEFINIDA"] == "do-ambiente"
     monkeypatch.delenv("ST_DOTENV")
+
+
+def test_integration_status_explains_what_is_missing(tmp_path, monkeypatch):
+    home = tmp_path / "homes" / "c"
+    home.mkdir(parents=True)
+    (home / "home.yaml").write_text("name: C\nadapters: [virtual, smartthings]\n")
+    monkeypatch.delenv("SMARTTHINGS_TOKEN", raising=False)
+    status = {i["id"]: i for i in build_hub("c", data_dir=tmp_path).integrations}
+    assert status["smartthings"]["status"] == "missing_token"
+    assert "SMARTTHINGS_TOKEN" in status["smartthings"]["detail"]
+    assert status["lg_thinq"]["status"] == "off"
+
+    monkeypatch.setenv("SMARTTHINGS_TOKEN", "x")
+    status = {i["id"]: i for i in build_hub("c", data_dir=tmp_path).integrations}
+    assert status["smartthings"]["status"] == "active"
