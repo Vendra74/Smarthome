@@ -38,7 +38,8 @@ def test_web_app_is_served(hub):
     with TestClient(create_app(hub=hub)) as client:
         page = client.get("/")
         assert page.status_code == 200 and "app.js" in page.text
-        assert client.get("/app.js").status_code == 200
+        js = client.get("/app.js")
+        assert js.status_code == 200 and js.headers["cache-control"] == "no-cache"
 
 
 def test_agent_without_key_returns_503(hub, monkeypatch, tmp_path):

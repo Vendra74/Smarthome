@@ -149,6 +149,13 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
             raise HTTPException(502, "O agente falhou ao responder, tente de novo") from exc
         return AgentResponse(reply=reply)
 
+    @app.middleware("http")
+    async def revalidate_web_files(request, call_next):
+        # Sem isso o navegador guarda o app antigo depois de um git pull.
+        response = await call_next(request)
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
     # O app web fica na raiz; precisa vir depois das rotas da API.
     app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
 
