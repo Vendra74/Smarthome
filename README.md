@@ -83,6 +83,24 @@ dispositivo móvel* e ligue a TV pelo controle uma vez com a central rodando,
 para ela aprender o IP e o MAC. Na primeira vez que a central falar direto com
 a TV, a TV pede autorização na tela; aceite.
 
+## Intelbras Izy Smart (Tuya)
+
+Os aparelhos do Izy Smart (e de Smart Life / Tuya Smart) entram pela API de
+nuvem da Tuya. Uma vez só:
+
+1. Crie uma conta em https://iot.tuya.com e, em *Cloud > Development*, um
+   projeto ("Smart Home", data center *Western America* para o Brasil).
+2. No projeto, aba *Devices > Link Tuya App Account*, escolha *Add App Account*
+   e leia o QR code com o app Izy Smart (*Eu > ícone de leitura no canto*).
+   Os aparelhos do app aparecem na lista do projeto.
+3. Copie *Access ID* e *Access Secret* da visão geral do projeto para o `.env`
+   (`TUYA_ACCESS_ID` e `TUYA_ACCESS_SECRET`), instale com
+   `pip install -e ".[tuya]"` e reinicie a central.
+
+Pronto: *Adicionar* lista os aparelhos do Izy Smart. Lâmpadas ganham
+liga/desliga e brilho; tomadas e interruptores, liga/desliga. O plano
+gratuito da Tuya vence a cada seis meses e é renovado com um clique no site.
+
 ## Uma pasta por casa
 
 A casa do Andre é o caso de referência, mas nada dela fica no código. Cada casa

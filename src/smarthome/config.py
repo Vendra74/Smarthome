@@ -24,6 +24,7 @@ from .adapters.lg_thinq import LGThinQAdapter
 from .adapters.lg_tv import LGTVAdapter
 from .adapters.samsung_tv import SamsungTVAdapter
 from .adapters.smartthings import SmartThingsAdapter
+from .adapters.tuya import TuyaAdapter
 from .adapters.virtual import VirtualAdapter
 from .hub import Hub
 from .registry import DeviceRegistry
@@ -39,15 +40,24 @@ class LGThinQConfig(BaseModel):
     country: str = "BR"
 
 
+class TuyaConfig(BaseModel):
+    """Intelbras Izy Smart, Smart Life e Tuya Smart: projeto em https://iot.tuya.com."""
+
+    access_id_env: str = "TUYA_ACCESS_ID"
+    access_secret_env: str = "TUYA_ACCESS_SECRET"
+    region: str = "us"  # data center do projeto Tuya; o Brasil costuma cair em "us"
+
+
 class HomeConfig(BaseModel):
     id: str
     name: str
     rooms: list[str] = Field(default_factory=list)
     adapters: list[str] = Field(
-        default_factory=lambda: ["virtual", "samsung_tv", "lg_tv", "smartthings", "lg_thinq"]
+        default_factory=lambda: ["virtual", "samsung_tv", "lg_tv", "smartthings", "lg_thinq", "tuya"]
     )
     smartthings: SmartThingsConfig = Field(default_factory=SmartThingsConfig)
     lg_thinq: LGThinQConfig = Field(default_factory=LGThinQConfig)
+    tuya: TuyaConfig = Field(default_factory=TuyaConfig)
 
 
 def home_dir(home_id: str, data_dir: Path | None = None) -> Path:
@@ -61,18 +71,20 @@ def load_home(home_id: str, data_dir: Path | None = None) -> HomeConfig:
     return HomeConfig.model_validate({"id": home_id, "name": home_id, **(raw or {})})
 
 
-CLOUD_INTEGRATIONS = {"smartthings": "SmartThings", "lg_thinq": "LG ThinQ"}
+CLOUD_INTEGRATIONS = {"smartthings": "SmartThings", "lg_thinq": "LG ThinQ", "tuya": "Tuya / Izy Smart"}
 
 
 def integration_status(home: HomeConfig) -> list[dict[str, str]]:
     """Situação das integrações de nuvem da casa, para o app explicar o que falta."""
     out = []
     for key, label in CLOUD_INTEGRATIONS.items():
-        token_env = getattr(home, key).token_env
+        section = getattr(home, key)
+        envs = [section.access_id_env, section.access_secret_env] if key == "tuya" else [section.token_env]
+        missing = [e for e in envs if not os.environ.get(e)]
         if key not in home.adapters:
             status, detail = "off", f"desligada no home.yaml (adicione {key} em adapters)"
-        elif not os.environ.get(token_env):
-            status, detail = "missing_token", f"falta {token_env} no .env"
+        elif missing:
+            status, detail = "missing_token", f"falta {' e '.join(missing)} no .env"
         else:
             status, detail = "active", "conectada"
         out.append({"id": key, "label": label, "status": status, "detail": detail})
@@ -91,6 +103,11 @@ def build_adapters(home: HomeConfig) -> list[Adapter]:
         adapters.append(SmartThingsAdapter(token))
     if "lg_thinq" in home.adapters and (token := os.environ.get(home.lg_thinq.token_env)):
         adapters.append(LGThinQAdapter(token, country=home.lg_thinq.country))
+    if "tuya" in home.adapters:
+        access_id = os.environ.get(home.tuya.access_id_env)
+        secret = os.environ.get(home.tuya.access_secret_env)
+        if access_id and secret:
+            adapters.append(TuyaAdapter(access_id, secret, region=home.tuya.region))
     return adapters
 
 

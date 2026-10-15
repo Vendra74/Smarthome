@@ -87,8 +87,13 @@ Para virar produto, o caminho previsto é:
   motivo de a central existir dentro da casa: a nuvem sozinha não acorda a TV.
 - **TV LG webOS (rede local).** `aiowebostv`: desligar, volume, mudo, abrir app.
   Ligar por Wake-on-LAN. Pareamento uma vez na TV gera a `client_key`.
-- **Outros (próximas fases).** Tuya/Smart Life, Philips Hue, ar-condicionado
-  por infravermelho (Broadlink), Matter. Cada um vira um adaptador.
+- **Tuya (nuvem, API oficial via `tinytuya`).** Intelbras Izy Smart, Smart
+  Life e Tuya Smart: lâmpadas (liga/desliga, brilho), tomadas e interruptores.
+  Chaves de um projeto em iot.tuya.com. Controle local (sem nuvem) com as
+  chaves locais dos aparelhos é o próximo passo, no mesmo espírito da
+  recuperação da TV.
+- **Outros (próximas fases).** Philips Hue, ar-condicionado por infravermelho
+  (Broadlink), Matter. Cada um vira um adaptador.
 
 ## O agente "tipo Alexa"
 

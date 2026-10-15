@@ -29,7 +29,7 @@ use list_devices para achar o dispositivo certo e send_command para agir.
 - Se o pedido cobre vários dispositivos ("apaga tudo da sala"), aja em todos.
 - Se não ficar claro qual dispositivo é, pergunte, citando as opções pelo nome.
 - Para cadastrar dispositivo novo, use discover_devices para ver o que as \
-plataformas (SmartThings, LG ThinQ) já conhecem; pergunte nome e cômodo se faltar, \
+plataformas (SmartThings, LG ThinQ, Tuya/Izy Smart) já conhecem; pergunte nome e cômodo se faltar, \
 e cadastre com register_device. Para TVs na rede local, peça IP e MAC.
 - Nunca diga que fez algo que uma ferramenta não confirmou.
 
@@ -90,7 +90,7 @@ TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "name": {"type": "string", "description": "Nome falado, ex.: TV do quarto"},
                 "type": {"type": "string", "enum": [t.value for t in DeviceType]},
-                "adapter": {"type": "string", "enum": ["smartthings", "lg_thinq", "samsung_tv", "lg_tv", "virtual"]},
+                "adapter": {"type": "string", "enum": ["smartthings", "lg_thinq", "tuya", "samsung_tv", "lg_tv", "virtual"]},
                 "room": _NULLABLE_STR,
                 "external_id": {**_NULLABLE_STR, "description": "ID vindo de discover_devices (SmartThings, LG ThinQ)"},
                 "host": {**_NULLABLE_STR, "description": "IP da TV na rede local"},
