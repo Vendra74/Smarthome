@@ -151,6 +151,31 @@ o app Alexa de fato, isso exigiria automação de navegador e fica para avaliar.
 3. **Fase 3:** Smart Home Skill da Alexa e acesso externo seguro.
 4. **Fase 4:** cenas e rotinas ("modo cinema", "boa noite"), mais adaptadores.
 
+## Configuração zero para o usuário final
+
+Decisão de produto (15/10/2026): tudo que exige conta de desenvolvedor, token
+pessoal ou chave no `.env` é trabalho de quem publica o app, feito uma vez.
+O usuário final só faz "entrar com a conta" ou lê um QR code; o resto é do
+agente. O que isso exige, por ordem:
+
+1. **Login por conta, não por chave.** SmartThings por OAuth (SmartApp
+   registrada pela empresa; o usuário clica em "conectar Samsung"). Tuya por
+   QR code lido com Smart Life ou Tuya Smart, sem conta na plataforma Tuya
+   (SDK de compartilhamento de dispositivos, o mesmo caminho do Home
+   Assistant). LG ThinQ só oferece token pessoal por enquanto: o agente guia a
+   pessoa passo a passo. Apps de marca fechados (Intelbras Izy Smart) não
+   permitem vínculo externo: o agente orienta a parear no Smart Life.
+2. **Matter como padrão para aparelho novo.** A central vira controlador
+   Matter (`python-matter-server`): lâmpadas, tomadas e sensores entram pelo
+   QR da caixa, sem nuvem de fabricante.
+3. **O agente cuida da configuração.** Onboarding por conversa ("quais apps
+   você usa em casa?"), descoberta e nomeação automáticas, e autodiagnóstico
+   de rede: duas redes em casa, roteador em modo errado, TV fora do alcance,
+   limite de consultas da nuvem. Tudo que hoje é feito à mão vira verificação
+   com explicação em português.
+4. **Central num aparelho fixo.** Mini computador ligado por cabo no
+   roteador, para não sair da rede quando o usuário circula pela casa.
+
 ## Segurança
 
 - A API não tem autenticação ainda: rode só na rede local até a fase 3.
