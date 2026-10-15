@@ -143,3 +143,33 @@ def test_state_scans_lan_when_tv_has_no_host_yet(tmp_path):
     state = asyncio.run(hub.get_state("tv-sala"))
     assert state.online is True and state.power is True and state.attributes["via"] == "rede local"
     assert hub.registry.get("tv-sala").config["host"] == "192.168.0.50"
+
+
+def test_ssdp_failure_does_not_crash_the_scan(monkeypatch):
+    """No macOS sem permissão de rede local, sendto dá 'No route to host'."""
+    import socket
+
+    from smarthome.adapters import samsung_lan
+
+    def boom(self, *_args, **_kwargs):
+        raise OSError(65, "No route to host")
+
+    monkeypatch.setattr(socket.socket, "sendto", boom)
+    assert samsung_lan._ssdp_hosts(0.1) == set()
+
+
+def test_sweep_finds_tv_without_multicast(monkeypatch):
+    import ipaddress
+
+    from smarthome.adapters import samsung_lan
+
+    async def fake_info(host, timeout=2.0):
+        if host == "10.0.0.20":
+            return {"host": host, "name": TV_NAME, "model": "", "mac": "AA:BB:CC:DD:EE:FF", "power": True}
+        return None
+
+    monkeypatch.setattr(samsung_lan, "_ssdp_hosts", lambda timeout: set())
+    monkeypatch.setattr(samsung_lan, "tv_info", fake_info)
+    monkeypatch.setattr(samsung_lan, "local_network", lambda: ipaddress.ip_network("10.0.0.0/24"))
+    found = asyncio.run(samsung_lan.find_samsung_tvs())
+    assert [t["host"] for t in found] == ["10.0.0.20"]

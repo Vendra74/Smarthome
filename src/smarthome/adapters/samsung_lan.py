@@ -9,13 +9,18 @@ como offline.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
+import logging
 import re
 import socket
 from typing import Any
 
 import httpx
 
+log = logging.getLogger(__name__)
+
 SSDP_ADDR = ("239.255.255.250", 1900)
+BROADCAST_ADDR = ("255.255.255.255", 1900)
 SSDP_TARGET = "urn:samsung.com:device:RemoteControlReceiver:1"
 INFO_PORT = 8001
 
@@ -55,8 +60,18 @@ def _ssdp_hosts(timeout: float) -> set[str]:
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.settimeout(timeout)
-        for _ in range(2):
-            sock.sendto(message, SSDP_ADDR)
+        sent = False
+        for addr in (SSDP_ADDR, BROADCAST_ADDR):
+            try:
+                sock.sendto(message, addr)
+                sock.sendto(message, addr)
+                sent = True
+            except OSError as exc:
+                # No macOS, sem permissão de "Rede local" para o Terminal (ou com VPN),
+                # multicast dá "No route to host". A varredura por IP cobre esse caso.
+                log.info("SSDP para %s falhou: %s", addr[0], exc)
+        if not sent:
+            return hosts
         try:
             while True:
                 data, (addr, _port) = sock.recvfrom(4096)
@@ -67,11 +82,43 @@ def _ssdp_hosts(timeout: float) -> set[str]:
     return hosts
 
 
+def local_network() -> ipaddress.IPv4Network | None:
+    """A rede /24 em que a central está (sem mandar pacote: só consulta a rota padrão)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 53))
+            ip = sock.getsockname()[0]
+    except OSError:
+        return None
+    return ipaddress.ip_network(f"{ip}/24", strict=False)
+
+
+async def sweep_samsung_tvs(network: ipaddress.IPv4Network, timeout: float = 1.5) -> list[dict[str, Any]]:
+    """Pergunta a cada IP da rede se é uma TV Samsung (porta 8001). Não depende de multicast."""
+    limit = asyncio.Semaphore(64)
+
+    async def probe(host: str):
+        async with limit:
+            return await tv_info(host, timeout=timeout)
+
+    infos = await asyncio.gather(*(probe(str(h)) for h in network.hosts()))
+    return [i for i in infos if i]
+
+
 async def find_samsung_tvs(timeout: float = 3.0) -> list[dict[str, Any]]:
-    """TVs Samsung ligadas (ou em standby com rede ativa) na rede local."""
+    """TVs Samsung ligadas (ou em standby com rede ativa) na rede local.
+
+    Tenta SSDP primeiro (rápido); se não achar nada, varre a rede IP a IP."""
     hosts = await asyncio.to_thread(_ssdp_hosts, timeout)
     infos = await asyncio.gather(*(tv_info(h) for h in sorted(hosts)))
-    return [i for i in infos if i]
+    found = [i for i in infos if i]
+    if found:
+        return found
+    network = local_network()
+    if network is None:
+        return []
+    log.info("SSDP não achou TV; varrendo %s", network)
+    return await sweep_samsung_tvs(network)
 
 
 def same_tv(a: str, b: str) -> bool:

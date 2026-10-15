@@ -87,7 +87,10 @@ class Hub:
         except AdapterError:
             state = DeviceState(online=False)
         if self.recovery.applies(device):
-            state = await self.recovery.state(self, device, state)
+            try:
+                state = await self.recovery.state(self, device, state)
+            except Exception as exc:  # a busca na rede nunca pode derrubar a listagem
+                log.warning("Busca de %s na rede local falhou: %s", device_id, exc)
         return state
 
     async def discover(self, adapter_name: str | None = None) -> list[DiscoveredDevice]:
