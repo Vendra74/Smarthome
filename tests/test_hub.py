@@ -42,3 +42,51 @@ def test_find_by_name_ignores_accents(hub):
     assert [d.id for d in hub.registry.find_by_name("luz da cozinha")] == ["luz-da-cozinha"]
     assert hub.registry.find_by_name("LUZ DA CÓPA")[0].id == "luz-da-cozinha"
     assert [d.id for d in hub.registry.in_room("Sála")] == ["luz-sala"]
+
+
+def test_discover_merges_lan_tv_into_cloud_tv_and_skips_registered(hub):
+    import asyncio
+
+    from smarthome.adapters.base import Adapter
+    from smarthome.models import DiscoveredDevice
+
+    class Cloud(Adapter):
+        async def execute(self, device, command, params):
+            raise NotImplementedError
+
+        async def get_state(self, device):
+            raise NotImplementedError
+
+        name = "smartthings"
+
+        async def discover(self):
+            return [DiscoveredDevice(adapter="smartthings", external_id="st-85", name="85\" Crystal UHD",
+                                     suggested_type=DeviceType.TV, config={"device_id": "st-85"})]
+
+    class Lan(Adapter):
+        async def execute(self, device, command, params):
+            raise NotImplementedError
+
+        async def get_state(self, device):
+            raise NotImplementedError
+
+        name = "samsung_tv"
+
+        async def discover(self):
+            return [
+                DiscoveredDevice(adapter="samsung_tv", external_id="10.0.0.19", name="[TV] 85\" Crystal UHD",
+                                 suggested_type=DeviceType.TV, config={"host": "10.0.0.19", "mac": "4C:57:39:8C:3B:D8"}),
+                DiscoveredDevice(adapter="samsung_tv", external_id="10.0.0.18", name="[TV] Samsung 7 Series (75)",
+                                 suggested_type=DeviceType.TV, config={"host": "10.0.0.18", "mac": "00:7C:2D:6B:35:0B"}),
+                DiscoveredDevice(adapter="samsung_tv", external_id="10.0.0.30", name="TV do quarto",
+                                 suggested_type=DeviceType.TV, config={"host": "10.0.0.30"}),
+            ]
+
+    hub.set_adapter(Cloud())
+    hub.set_adapter(Lan())
+    hub.register(name="TV 75", type=DeviceType.TV, adapter="smartthings",
+                 config={"device_id": "st-75", "host": "10.0.0.18", "mac": "00:7C:2D:6B:35:0B"})
+    found = asyncio.run(hub.discover())
+    assert [(d.adapter, d.name) for d in found] == [("smartthings", "85\" Crystal UHD"), ("samsung_tv", "TV do quarto")]
+    # a TV da nuvem já vem com IP e MAC da rede, para a recuperação local
+    assert found[0].config == {"device_id": "st-85", "host": "10.0.0.19", "mac": "4C:57:39:8C:3B:D8"}

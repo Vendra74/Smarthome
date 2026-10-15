@@ -323,10 +323,12 @@ function setupAddDialog() {
   const tvFields = form.querySelector(".tv-fields");
   const syncTvFields = () => (tvFields.hidden = !["samsung_tv", "lg_tv"].includes(form.adapter.value));
   form.adapter.addEventListener("change", syncTvFields);
+  let picked = null; // item da descoberta escolhido; o cadastro leva o config inteiro dele
 
   $("#add-device").addEventListener("click", async () => {
     form.reset();
     form.device_id.value = "";
+    picked = null;
     error.hidden = true;
     syncTvFields();
     const list = $("#discovered");
@@ -359,10 +361,13 @@ function setupAddDialog() {
           null,
           (i) => {
             const d = found[Number(i)];
-            form.name.value = d.name;
+            picked = d;
+            form.name.value = d.name.replace(/^\[TV\]\s*/i, "");
             form.type.value = d.suggested_type;
             form.adapter.value = d.adapter;
-            form.device_id.value = d.external_id;
+            form.device_id.value = d.config.device_id || "";
+            form.host.value = d.config.host || "";
+            form.mac.value = d.config.mac || "";
             syncTvFields();
           }
         )
@@ -374,7 +379,7 @@ function setupAddDialog() {
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const config = {};
+    const config = { ...((picked && picked.config) || {}) };
     if (form.device_id.value) config.device_id = form.device_id.value;
     if (!tvFields.hidden) {
       if (form.host.value) config.host = form.host.value.trim();

@@ -12,8 +12,9 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from ..models import Command, Device, DeviceState
+from ..models import Command, Device, DeviceState, DeviceType, DiscoveredDevice
 from .base import Adapter, AdapterError
+from .samsung_lan import find_samsung_tvs
 from .wol import send_magic_packet
 
 # IDs de apps conhecidos na Tizen; o usuário pode passar o ID direto também.
@@ -79,6 +80,19 @@ class SamsungTVAdapter(Adapter):
         except Exception as exc:  # a biblioteca levanta vários tipos de erro de rede
             raise AdapterError(f"TV Samsung {device.id}: {exc}") from exc
         return await self.get_state(device) if command != Command.TURN_OFF else DeviceState(power=False)
+
+    async def discover(self) -> list[DiscoveredDevice]:
+        """TVs Samsung ligadas na rede local (SSDP e varredura), com IP e MAC prontos."""
+        return [
+            DiscoveredDevice(
+                adapter=self.name,
+                external_id=tv["host"],
+                name=tv["name"] or tv["model"] or tv["host"],
+                suggested_type=DeviceType.TV,
+                config={"host": tv["host"], **({"mac": tv["mac"]} if tv["mac"] else {})},
+            )
+            for tv in await find_samsung_tvs()
+        ]
 
     async def get_state(self, device: Device) -> DeviceState:
         def info() -> dict[str, Any]:

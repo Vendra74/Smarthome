@@ -11,6 +11,7 @@ import unicodedata
 from typing import TYPE_CHECKING, Any
 
 from .adapters.base import Adapter, AdapterError, DeviceUnreachable
+from .adapters.samsung_lan import same_tv
 from .models import Command, CommandResult, Device, DeviceState, DeviceType, DiscoveredDevice
 from .recovery import TVRecovery
 from .registry import DeviceRegistry
@@ -25,6 +26,22 @@ def slugify(text: str) -> str:
     text = unicodedata.normalize("NFKD", text.lower())
     text = "".join(c for c in text if not unicodedata.combining(c))
     return re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+
+
+def _merge_lan_tvs(found: list[DiscoveredDevice]) -> list[DiscoveredDevice]:
+    """A mesma TV achada na nuvem (SmartThings) e na rede vira um item só: o da nuvem, que
+    tem volume e estado, já com IP e MAC da rede para a recuperação local."""
+    lan = [i for i in found if i.adapter in ("samsung_tv", "lg_tv")]
+    others = [i for i in found if i not in lan]
+    merged = []
+    for item in others:
+        if item.suggested_type == DeviceType.TV:
+            twin = next((t for t in lan if same_tv(t.name, item.name)), None)
+            if twin is not None:
+                lan.remove(twin)
+                item = item.model_copy(update={"config": {**item.config, **twin.config}})
+        merged.append(item)
+    return merged + lan
 
 
 class Hub:
@@ -109,6 +126,8 @@ class Hub:
         known = {
             (d.adapter, d.config.get("device_id") or d.config.get("host")) for d in self.registry.all()
         }
+        # TV já cadastrada por qualquer adaptador (a nuvem e a rede acham a mesma TV)
+        known_hosts = {d.config.get(k) for d in self.registry.all() for k in ("host", "mac") if d.config.get(k)}
         found: list[DiscoveredDevice] = []
         for adapter in self.adapters.values():
             if adapter_name and adapter.name != adapter_name:
@@ -120,8 +139,13 @@ class Hub:
                 self.discovery_errors[adapter.name] = str(exc)
                 continue
             self.discovery_errors.pop(adapter.name, None)
-            found.extend(i for i in items if (i.adapter, i.external_id) not in known)
-        return found
+            for item in items:
+                if (item.adapter, item.external_id) in known:
+                    continue
+                if item.config.get("host") in known_hosts or item.config.get("mac") in known_hosts:
+                    continue
+                found.append(item)
+        return _merge_lan_tvs(found)
 
     def register(
         self,
