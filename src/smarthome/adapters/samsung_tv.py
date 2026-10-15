@@ -31,9 +31,12 @@ class SamsungTVAdapter(Adapter):
 
     def _connect(self, device: Device):
         try:
+            import urllib3
             from samsungtvws import SamsungTVWS
         except ImportError as exc:
             raise AdapterError("Instale o extra samsung: pip install -e '.[samsung]'") from exc
+        # A TV usa certificado próprio; o aviso a cada comando só polui o log.
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         token_file = Path(device.config.get("token_file", f"tokens/{device.id}.token"))
         token_file.parent.mkdir(parents=True, exist_ok=True)
         return SamsungTVWS(

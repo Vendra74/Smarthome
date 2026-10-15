@@ -60,7 +60,10 @@ def make_hub(tmp_path, cloud, lan=(), info=None, local=None, config=None):
     async def no_sleep(_seconds):
         pass
 
-    recovery = TVRecovery(scan=scan, info=tv_info, wake=woken.append, sleep=no_sleep, timeout=9, interval=3)
+    def wake(mac, host=None):
+        woken.append(mac)
+
+    recovery = TVRecovery(scan=scan, info=tv_info, wake=wake, sleep=no_sleep, timeout=9, interval=3)
     hub = Hub(registry, [cloud, *([local] if local else [])], recovery=recovery)
     return hub, woken
 
@@ -196,3 +199,24 @@ def test_macos_block_is_named_in_the_message(monkeypatch, tmp_path):
     samsung_lan._blocked = False
     result = asyncio.run(hub.execute("tv-sala", Command.TURN_ON))
     assert "Rede local" not in result.message and "mesma rede" in result.message
+
+
+def test_tv_awake_on_lan_but_cloud_still_blind_is_reported_as_on(tmp_path):
+    cloud = FlakyCloud(fails=99)
+    awake = {"host": "10.0.0.18", "name": TV_NAME, "model": "", "mac": "AA:BB:CC:DD:EE:FF", "power": True}
+    answers = iter([None, awake])  # desligada na 1ª consulta (locate), ligada depois do Wake-on-LAN
+    hub, _ = make_hub(tmp_path, cloud, info=lambda host: next(answers, awake),
+                      config={"host": "10.0.0.18", "mac": "AA:BB:CC:DD:EE:FF"})
+    result = asyncio.run(hub.execute("tv-sala", Command.TURN_ON))
+    assert result.ok and result.state.power is True and "ainda não a vê" in result.message
+
+
+def test_magic_packet_goes_to_subnet_broadcast_and_tv(monkeypatch):
+    import socket
+
+    from smarthome.adapters import wol
+
+    sent = []
+    monkeypatch.setattr(socket.socket, "sendto", lambda self, data, addr: sent.append(addr[0]))
+    wol.send_magic_packet("AA:BB:CC:DD:EE:FF", host="10.0.0.18")
+    assert sent == ["255.255.255.255", "10.0.0.255", "10.0.0.18"]

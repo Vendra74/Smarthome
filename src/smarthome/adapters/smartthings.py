@@ -114,7 +114,9 @@ class SmartThingsAdapter(Adapter):
             except OAuthError as exc:
                 raise AdapterError(f"SmartThings: {exc}") from exc
         except httpx.HTTPStatusError as exc:
-            log.warning("SmartThings %s %s -> %s: %s", method, url, exc.response.status_code, exc.response.text[:500])
+            # 409 em TV é rotina (standby); fica em INFO para não parecer erro no log
+            level = logging.INFO if exc.response.status_code == 409 else logging.WARNING
+            log.log(level, "SmartThings %s %s -> %s: %s", method, url, exc.response.status_code, exc.response.text[:500])
             raise AdapterError(f"SmartThings: {_describe_error(exc.response)}") from exc
         except httpx.HTTPError as exc:
             raise AdapterError(f"SmartThings: {exc}") from exc

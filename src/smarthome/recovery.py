@@ -42,7 +42,7 @@ class TVRecovery:
         self,
         scan: Callable[[], Awaitable[list[dict[str, Any]]]] = find_samsung_tvs,
         info: Callable[[str], Awaitable[dict[str, Any] | None]] = tv_info,
-        wake: Callable[[str], None] = send_magic_packet,
+        wake: Callable[..., None] = send_magic_packet,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         timeout: float = 25.0,
         interval: float = 3.0,
@@ -87,8 +87,9 @@ class TVRecovery:
                 f"{device.name} está fora do alcance e não achei o MAC dela na rede para acordá-la. "
                 "Ligue a TV uma vez pelo controle, que a central guarda o IP e o MAC. " + hint()
             )
+        host = device.config.get("host")
         for _ in range(3):
-            self._wake(mac)
+            self._wake(mac, host=host)
         waited = 0.0
         while waited < self.timeout:
             await self._sleep(self.interval)
@@ -96,6 +97,12 @@ class TVRecovery:
             try:
                 state = await adapter.execute(device, command, params)
             except DeviceUnreachable:
+                # A TV responde na rede segundos antes de a nuvem perceber: se ela já
+                # acordou, "ligar" está cumprido mesmo com a SmartThings atrasada.
+                if host and command == Command.TURN_ON:
+                    info = await self._info(host)
+                    if info and info["power"]:
+                        return DeviceState(power=True), f"{device.name} acordou pela rede; a SmartThings ainda não a vê."
                 continue
             return state, f"{device.name} estava fora do alcance; acordei pela rede."
         raise DeviceUnreachable(
@@ -109,7 +116,12 @@ class TVRecovery:
         if command == Command.TURN_ON:
             return DeviceState(power=True), f"{device.name} já está ligada; a SmartThings é que não a via."
         local = hub.adapters.get("samsung_tv")
-        if local is not None and command != Command.SET_VOLUME:
+        if command == Command.SET_VOLUME:
+            raise DeviceUnreachable(
+                f"{device.name} está ligada, mas a SmartThings não a enxerga agora e pela rede a TV só "
+                "aceita 'aumentar' e 'diminuir', não um valor. Tente de novo em instantes."
+            )
+        if local is not None:
             try:
                 state = await local.execute(device, command, params)
                 return state, f"{device.name} atendeu pela rede local."
