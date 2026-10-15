@@ -438,7 +438,9 @@ function setupAccountsDialog() {
       info.append(name, detail);
       const button = document.createElement("button");
       button.type = "button";
-      if (acc.status === "connected") {
+      if (acc.status === "connected" && !acc.removable) {
+        button.hidden = true; // veio de chave do .env: só quem configurou a central tira
+      } else if (acc.status === "connected") {
         button.className = "ghost";
         button.textContent = "Desconectar";
         button.addEventListener("click", async () => {
