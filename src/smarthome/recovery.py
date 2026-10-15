@@ -54,6 +54,19 @@ class TVRecovery:
     def applies(self, device: Device) -> bool:
         return device.type == DeviceType.TV and device.adapter == "smartthings"
 
+    def nudge(self, device: Device) -> None:
+        """Antes de todo 'ligar' de TV, manda o pacote de acordar se o MAC é conhecido.
+
+        A SmartThings às vezes aceita o 'ligar' de uma TV em standby profundo sem que ela
+        reaja; o pacote é inofensivo com a TV ligada e resolve esse caso sem esperar o 409."""
+        mac = device.config.get("mac")
+        if not mac:
+            return
+        try:
+            self._wake(mac, host=device.config.get("host"))
+        except (OSError, ValueError) as exc:
+            log.info("Wake-on-LAN preventivo em %s falhou: %s", device.id, exc)
+
     async def locate(self, hub: Hub, device: Device) -> dict[str, Any] | None:
         """Dados da TV na rede local; descobre e guarda IP/MAC na primeira vez."""
         host = device.config.get("host")

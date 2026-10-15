@@ -91,6 +91,8 @@ class Hub:
             )
         adapter = self._adapter(device)
         note = ""
+        if command == Command.TURN_ON and self.recovery.applies(device):
+            self.recovery.nudge(device)
         try:
             try:
                 state = await adapter.execute(device, command, params or {})

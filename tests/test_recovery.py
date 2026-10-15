@@ -77,7 +77,7 @@ def test_standby_tv_is_woken_and_command_retried(tmp_path):
 
     assert result.ok and result.state.power is True
     assert "acordei" in result.message
-    assert woken == ["AA:BB:CC:DD:EE:FF"] * 3
+    assert woken == ["AA:BB:CC:DD:EE:FF"] * 3  # sem MAC guardado antes, só os 3 da recuperação
     assert cloud.calls == [Command.TURN_ON] * 3  # a original + 2 tentativas após o Wake-on-LAN
     saved = DeviceRegistry(tmp_path / "devices.yaml").get("tv-sala").config
     assert saved["host"] == "192.168.0.50" and saved["mac"] == "AA:BB:CC:DD:EE:FF"  # guardado para a próxima
@@ -94,7 +94,7 @@ def test_gives_up_with_a_clear_message_when_tv_never_wakes(tmp_path):
     hub, woken = make_hub(tmp_path, FlakyCloud(fails=99), config={"mac": "AA:BB:CC:DD:EE:FF"})
     result = asyncio.run(hub.execute("tv-sala", Command.TURN_ON))
     assert not result.ok and "não respondeu em 9 s" in result.message and "Ligar com dispositivo móvel" in result.message
-    assert len(woken) == 3
+    assert len(woken) == 4  # 1 preventivo no "ligar" + 3 da recuperação
 
 
 def test_without_mac_explains_how_to_teach_the_hub(tmp_path):
@@ -220,3 +220,14 @@ def test_magic_packet_goes_to_subnet_broadcast_and_tv(monkeypatch):
     monkeypatch.setattr(socket.socket, "sendto", lambda self, data, addr: sent.append(addr[0]))
     wol.send_magic_packet("AA:BB:CC:DD:EE:FF", host="10.0.0.18")
     assert sent == ["255.255.255.255", "10.0.0.255", "10.0.0.18"]
+
+
+def test_turn_on_always_sends_wake_on_lan_when_mac_is_known(tmp_path):
+    """A SmartThings pode aceitar o 'ligar' sem a TV reagir; o pacote vai junto, por garantia."""
+    cloud = FlakyCloud(fails=0)
+    hub, woken = make_hub(tmp_path, cloud, config={"host": "10.0.0.18", "mac": "AA:BB:CC:DD:EE:FF"})
+    result = asyncio.run(hub.execute("tv-sala", Command.TURN_ON))
+    assert result.ok and woken == ["AA:BB:CC:DD:EE:FF"] and cloud.calls == [Command.TURN_ON]
+    # desligar não acorda
+    asyncio.run(hub.execute("tv-sala", Command.TURN_OFF))
+    assert len(woken) == 1
