@@ -231,3 +231,26 @@ def test_turn_on_always_sends_wake_on_lan_when_mac_is_known(tmp_path):
     # desligar não acorda
     asyncio.run(hub.execute("tv-sala", Command.TURN_OFF))
     assert len(woken) == 1
+
+
+def test_one_scan_serves_all_tvs_and_logs_only_changes(tmp_path, caplog):
+    import logging
+
+    scans = []
+
+    async def scan():
+        scans.append(1)
+        return []
+
+    registry = DeviceRegistry(tmp_path / "devices.yaml")
+    for i in (1, 2, 3):
+        registry.add(Device(id=f"tv-{i}", name=f"TV {i}", type=DeviceType.TV, adapter="smartthings",
+                            config={"device_id": f"st-{i}"}))
+    recovery = TVRecovery(scan=scan, timeout=9, interval=3)
+    hub = Hub(registry, [FlakyCloud(fails=99)], recovery=recovery)
+    with caplog.at_level(logging.INFO, logger="smarthome.recovery"):
+        for i in (1, 2, 3):
+            asyncio.run(hub.get_state(f"tv-{i}"))
+        asyncio.run(hub.get_state("tv-1"))
+    assert len(scans) == 1  # três TVs offline, uma varredura só
+    assert caplog.text.count("TVs Samsung na rede local") == 1

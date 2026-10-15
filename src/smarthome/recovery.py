@@ -50,6 +50,10 @@ class TVRecovery:
         self._scan, self._info, self._wake, self._sleep = scan, info, wake, sleep
         self.timeout, self.interval = timeout, interval
         self._last_scan: dict[str, float] = {}
+        # Uma varredura serve para todas as TVs por um tempo; o log só muda quando o resultado muda.
+        self._scan_cache: tuple[float, list[dict[str, Any]]] | None = None
+        self._scan_lock = asyncio.Lock()
+        self._last_logged: list[tuple[Any, ...]] | None = None
 
     def applies(self, device: Device) -> bool:
         return device.type == DeviceType.TV and device.adapter == "smartthings"
@@ -67,6 +71,19 @@ class TVRecovery:
         except (OSError, ValueError) as exc:
             log.info("Wake-on-LAN preventivo em %s falhou: %s", device.id, exc)
 
+    async def _scan_shared(self, max_age: float = 30.0) -> list[dict[str, Any]]:
+        """Varre a rede no máximo uma vez a cada `max_age` s, para todas as TVs juntas."""
+        async with self._scan_lock:
+            if self._scan_cache and time.monotonic() - self._scan_cache[0] < max_age:
+                return self._scan_cache[1]
+            tvs = await self._scan()
+            self._scan_cache = (time.monotonic(), tvs)
+        summary = [(t["name"], t["host"], t["mac"]) for t in tvs]
+        if summary != self._last_logged:
+            log.info("TVs Samsung na rede local: %s", summary or "nenhuma")
+            self._last_logged = summary
+        return tvs
+
     async def locate(self, hub: Hub, device: Device) -> dict[str, Any] | None:
         """Dados da TV na rede local; descobre e guarda IP/MAC na primeira vez."""
         host = device.config.get("host")
@@ -74,8 +91,7 @@ class TVRecovery:
             found = await self._info(host)
             if found:
                 return found
-        tvs = await self._scan()
-        log.info("TVs Samsung na rede local: %s", [(t["name"], t["host"], t["mac"]) for t in tvs] or "nenhuma")
+        tvs = await self._scan_shared()
         for tv in tvs:
             if same_tv(tv["name"], device.name) or (host and tv["host"] == host):
                 if tv["host"] != host or (tv["mac"] and tv["mac"] != device.config.get("mac")):
@@ -89,6 +105,7 @@ class TVRecovery:
         self, hub: Hub, device: Device, command: Command, params: dict[str, Any], adapter: Adapter
     ) -> tuple[DeviceState, str]:
         """Tenta cumprir o comando pela rede local. Devolve (estado, nota) ou levanta AdapterError."""
+        self._scan_cache = None  # num comando, vale a rede de agora
         tv = await self.locate(hub, device)
         if tv and tv["power"]:
             return await self._local(hub, device, command, params, adapter)

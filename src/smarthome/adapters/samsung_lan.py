@@ -142,7 +142,7 @@ async def find_samsung_tvs(timeout: float = 3.0) -> list[dict[str, Any]]:
     network = local_network()
     if network is None:
         return []
-    log.info("SSDP não achou TV; varrendo %s", network)
+    log.debug("SSDP não achou TV; varrendo %s", network)
     found = await sweep_samsung_tvs(network)
     if not found and _blocked:
         log.warning(MACOS_HINT)
