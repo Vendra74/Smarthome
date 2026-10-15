@@ -12,6 +12,7 @@ Ainda não testado com aparelho real.
 
 from __future__ import annotations
 
+import ssl
 import uuid
 from typing import Any
 
@@ -40,11 +41,15 @@ class LGThinQAdapter(Adapter):
     async def _get_api(self):
         if self._api is None:
             try:
-                from aiohttp import ClientSession
+                import certifi
+                from aiohttp import ClientSession, TCPConnector
                 from thinqconnect import ThinQApi
             except ImportError as exc:
                 raise AdapterError("Instale o extra lg: pip install -e '.[lg]'") from exc
-            self._session = ClientSession()
+            # O Python do python.org/Homebrew no macOS não usa os certificados do sistema;
+            # o certifi (o mesmo que o httpx usa no SmartThings) evita CERTIFICATE_VERIFY_FAILED.
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            self._session = ClientSession(connector=TCPConnector(ssl=ssl_context))
             self._api = ThinQApi(
                 session=self._session,
                 access_token=self._token,
