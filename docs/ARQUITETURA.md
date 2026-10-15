@@ -15,10 +15,10 @@
                             |
                   Casa: home.yaml + devices.yaml
                             |
-   +-------------+--------------+-------------+-----------+
-   | SmartThings | TV Samsung   | TV LG       | Virtual   |  <- adaptadores
-   | (nuvem)     | (rede local) | (rede local)| (testes)  |
-   +-------------+--------------+-------------+-----------+
+   +-------------+----------+------------+--------+---------+
+   | SmartThings | LG ThinQ | TV Samsung | TV LG  | Virtual |  <- adaptadores
+   | (nuvem)     | (nuvem)  | (rede)     | (rede) | (teste) |
+   +-------------+----------+------------+--------+---------+
 ```
 
 **Uma regra só:** tudo passa pelo `Hub`. App, voz e Alexa nunca falam direto
@@ -35,7 +35,7 @@ fabricante novo basta escrever um adaptador.
 | Casa | `src/smarthome/config.py` | Carrega a pasta da casa e monta o Hub dela |
 | Cadastro | `src/smarthome/registry.py` | Lista de dispositivos com cômodo e apelidos, salva em YAML |
 | Hub | `src/smarthome/hub.py` | Valida e despacha comandos, descobre e cadastra dispositivos |
-| Adaptadores | `src/smarthome/adapters/` | SmartThings, Samsung, LG, virtual |
+| Adaptadores | `src/smarthome/adapters/` | SmartThings, LG ThinQ, TV Samsung, TV LG, virtual |
 | Agente | `src/smarthome/agent.py` | Entende pedidos em português e usa o Hub via ferramentas |
 | API | `src/smarthome/api.py` | REST para o app, a voz e a Alexa |
 | App web | `src/smarthome/web/` | Tela por cômodo, voz no navegador, cadastro; servida pela própria API |
@@ -72,6 +72,11 @@ Para virar produto, o caminho previsto é:
   tomadas e ar-condicionado que já estão no app SmartThings, e também para TVs
   Samsung. Token pessoal em `SMARTTHINGS_TOKEN`. A central lista o que existe
   na conta (`/discover`) e o usuário escolhe o que cadastrar.
+- **LG ThinQ (nuvem, API oficial ThinQ Connect).** Eletrodomésticos do app
+  LG ThinQ, pelo SDK oficial `thinqconnect`. Ar-condicionado com liga/desliga,
+  modo e temperatura; os demais aparelhos aparecem com estado e ganham
+  comandos conforme a necessidade. Token pessoal em `LG_THINQ_TOKEN`. TVs LG
+  não fazem parte dessa API e seguem pela rede local.
 - **TV Samsung (rede local).** `samsungtvws`: desligar, mudo, canal, abrir app.
   Ligar é por Wake-on-LAN (precisa do MAC). Volume absoluto só via SmartThings.
 - **TV LG webOS (rede local).** `aiowebostv`: desligar, volume, mudo, abrir app.

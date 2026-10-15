@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from .adapters.base import Adapter
+from .adapters.lg_thinq import LGThinQAdapter
 from .adapters.lg_tv import LGTVAdapter
 from .adapters.samsung_tv import SamsungTVAdapter
 from .adapters.smartthings import SmartThingsAdapter
@@ -32,12 +33,20 @@ class SmartThingsConfig(BaseModel):
     token_env: str = "SMARTTHINGS_TOKEN"
 
 
+class LGThinQConfig(BaseModel):
+    token_env: str = "LG_THINQ_TOKEN"
+    country: str = "BR"
+
+
 class HomeConfig(BaseModel):
     id: str
     name: str
     rooms: list[str] = Field(default_factory=list)
-    adapters: list[str] = Field(default_factory=lambda: ["virtual", "samsung_tv", "lg_tv", "smartthings"])
+    adapters: list[str] = Field(
+        default_factory=lambda: ["virtual", "samsung_tv", "lg_tv", "smartthings", "lg_thinq"]
+    )
     smartthings: SmartThingsConfig = Field(default_factory=SmartThingsConfig)
+    lg_thinq: LGThinQConfig = Field(default_factory=LGThinQConfig)
 
 
 def home_dir(home_id: str, data_dir: Path | None = None) -> Path:
@@ -61,6 +70,8 @@ def build_adapters(home: HomeConfig) -> list[Adapter]:
         adapters.append(LGTVAdapter())
     if "smartthings" in home.adapters and (token := os.environ.get(home.smartthings.token_env)):
         adapters.append(SmartThingsAdapter(token))
+    if "lg_thinq" in home.adapters and (token := os.environ.get(home.lg_thinq.token_env)):
+        adapters.append(LGThinQAdapter(token, country=home.lg_thinq.country))
     return adapters
 
 

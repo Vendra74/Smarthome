@@ -15,7 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 samsung = ["samsungtvws>=2.6"]
-lg = ["aiowebostv>=0.4"]
+lg = ["aiowebostv>=0.4", "thinqconnect>=1.0"]
 dev = ["pytest>=8"]
 
 [build-system]

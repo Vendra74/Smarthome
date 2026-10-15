@@ -2,6 +2,9 @@
 name: Casa do Andre
 rooms: [sala, quarto, cozinha]
 # Integrações ativas nesta casa
-adapters: [virtual, samsung_tv, lg_tv, smartthings]
+adapters: [virtual, samsung_tv, lg_tv, smartthings, lg_thinq]
 smartthings:
   token_env: SMARTTHINGS_TOKEN  # nome da variável de ambiente com o token desta casa
+lg_thinq:
+  token_env: LG_THINQ_TOKEN  # token pessoal do LG ThinQ desta casa
+  country: BR

@@ -31,6 +31,9 @@ o git. Variáveis já definidas no ambiente têm prioridade sobre o arquivo.
   funcionam e só os pedidos em linguagem natural ficam indisponíveis.
 - **`SMARTTHINGS_TOKEN`** (opcional): crie em
   https://account.smartthings.com/tokens com acesso a dispositivos.
+- **`LG_THINQ_TOKEN`** (opcional): entre com a conta do app LG ThinQ em
+  https://connect-pat.lgthinq.com, crie um token com todas as permissões e
+  instale o extra com `pip install -e ".[lg]"`.
 
 ## App e voz
 
