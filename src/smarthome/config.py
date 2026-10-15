@@ -19,12 +19,14 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
+from .accounts import PROVIDERS, AccountStore, SmartThingsOAuth, SmartThingsTokens
 from .adapters.base import Adapter
 from .adapters.lg_thinq import LGThinQAdapter
 from .adapters.lg_tv import LGTVAdapter
 from .adapters.samsung_tv import SamsungTVAdapter
 from .adapters.smartthings import SmartThingsAdapter
 from .adapters.tuya import TuyaAdapter
+from .adapters.tuya_sharing import TuyaSharingAdapter
 from .adapters.virtual import VirtualAdapter
 from .hub import Hub
 from .registry import DeviceRegistry
@@ -74,36 +76,66 @@ def load_home(home_id: str, data_dir: Path | None = None) -> HomeConfig:
 CLOUD_INTEGRATIONS = {"smartthings": "SmartThings", "lg_thinq": "LG ThinQ", "tuya": "Tuya / Izy Smart"}
 
 
-def integration_status(home: HomeConfig) -> list[dict[str, str]]:
+def _env_keys(home: HomeConfig, key: str) -> list[str]:
+    section = getattr(home, key)
+    return [section.access_id_env, section.access_secret_env] if key == "tuya" else [section.token_env]
+
+
+def integration_status(home: HomeConfig, accounts: AccountStore | None = None) -> list[dict[str, str]]:
     """Situação das integrações de nuvem da casa, para o app explicar o que falta."""
     out = []
+    connected = accounts.connected() if accounts else []
     for key, label in CLOUD_INTEGRATIONS.items():
-        section = getattr(home, key)
-        envs = [section.access_id_env, section.access_secret_env] if key == "tuya" else [section.token_env]
-        missing = [e for e in envs if not os.environ.get(e)]
+        missing = [e for e in _env_keys(home, key) if not os.environ.get(e)]
         if key not in home.adapters:
             status, detail = "off", f"desligada no home.yaml (adicione {key} em adapters)"
+        elif key in connected:
+            status, detail = "active", "conta conectada"
         elif missing:
-            status, detail = "missing_token", f"falta {' e '.join(missing)} no .env"
+            status, detail = "missing_token", "conecte a conta em Contas"
         else:
             status, detail = "active", "conectada"
         out.append({"id": key, "label": label, "status": status, "detail": detail})
     return out
 
 
-def build_adapters(home: HomeConfig) -> list[Adapter]:
+def account_adapter(provider: str, accounts: AccountStore, home: HomeConfig) -> Adapter | None:
+    """Adaptador que usa a conta conectada do provedor, ou None se ela não existe."""
+    account = accounts.load(provider)
+    if not account:
+        return None
+    if provider == "smartthings":
+        return SmartThingsAdapter(token_provider=SmartThingsTokens(accounts, SmartThingsOAuth.from_env()))
+    if provider == "tuya":
+        def on_token(token_info: dict) -> None:
+            current = accounts.load("tuya") or account
+            accounts.save("tuya", {**current, "token_response": {**current["token_response"], **token_info}})
+
+        return TuyaSharingAdapter(account, on_token=on_token)
+    if provider == "lg_thinq":
+        return LGThinQAdapter(account["token"], country=home.lg_thinq.country)
+    return None
+
+
+def build_adapters(home: HomeConfig, accounts: AccountStore | None = None) -> list[Adapter]:
+    """Monta os adaptadores: conta conectada em Contas vale mais que chave no .env."""
     adapters: list[Adapter] = []
+    if accounts:
+        for provider in PROVIDERS:
+            if provider in home.adapters and (adapter := account_adapter(provider, accounts, home)):
+                adapters.append(adapter)
+    active = {a.name for a in adapters}
     if "virtual" in home.adapters:
         adapters.append(VirtualAdapter())
     if "samsung_tv" in home.adapters:
         adapters.append(SamsungTVAdapter())
     if "lg_tv" in home.adapters:
         adapters.append(LGTVAdapter())
-    if "smartthings" in home.adapters and (token := os.environ.get(home.smartthings.token_env)):
+    if "smartthings" in set(home.adapters) - active and (token := os.environ.get(home.smartthings.token_env)):
         adapters.append(SmartThingsAdapter(token))
-    if "lg_thinq" in home.adapters and (token := os.environ.get(home.lg_thinq.token_env)):
+    if "lg_thinq" in set(home.adapters) - active and (token := os.environ.get(home.lg_thinq.token_env)):
         adapters.append(LGThinQAdapter(token, country=home.lg_thinq.country))
-    if "tuya" in home.adapters:
+    if "tuya" in set(home.adapters) - active:
         access_id = os.environ.get(home.tuya.access_id_env)
         secret = os.environ.get(home.tuya.access_secret_env)
         if access_id and secret:
@@ -119,7 +151,10 @@ def build_hub(home_id: str | None = None, data_dir: Path | None = None) -> Hub:
     # apontar para o certifi vale para todas as bibliotecas (aiohttp, websockets...).
     os.environ.setdefault("SSL_CERT_FILE", certifi.where())
     home = load_home(home_id or os.environ.get("SMARTHOME_HOME", "casa"), data_dir)
-    registry = DeviceRegistry(home_dir(home.id, data_dir) / "devices.yaml")
-    hub = Hub(registry, build_adapters(home), home=home)
-    hub.integrations = integration_status(home)
+    folder = home_dir(home.id, data_dir)
+    registry = DeviceRegistry(folder / "devices.yaml")
+    accounts = AccountStore(folder / "accounts")
+    hub = Hub(registry, build_adapters(home, accounts), home=home)
+    hub.accounts = accounts
+    hub.integrations = integration_status(home, accounts)
     return hub

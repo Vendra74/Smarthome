@@ -14,6 +14,7 @@ from typing import Any
 
 import anthropic
 
+from .accounts import PROVIDERS
 from .hub import Hub
 from .models import Command, DeviceType
 
@@ -31,6 +32,13 @@ use list_devices para achar o dispositivo certo e send_command para agir.
 - Para cadastrar dispositivo novo, use discover_devices para ver o que as \
 plataformas (SmartThings, LG ThinQ, Tuya/Izy Smart) já conhecem; pergunte nome e cômodo se faltar, \
 e cadastre com register_device. Para TVs na rede local, peça IP e MAC.
+- Se a plataforma do aparelho não está conectada (veja list_accounts), oriente a pessoa a \
+abrir "Contas" no app da central e conectar: Samsung/SmartThings é só entrar com a conta Samsung; \
+Smart Life ou Tuya Smart é digitar o código de usuário (no app: Eu, Configurações, Conta e \
+segurança, Código de usuário) e ler o QR code que a central mostra; LG ThinQ pede um token \
+pessoal gerado em connect-pat.lgthinq.com. Aparelhos do Intelbras Izy Smart não podem ser \
+ligados por fora: a pessoa deve pareá-los de novo no app Smart Life e conectar o Smart Life. \
+Nunca peça chaves ou tokens pelo chat.
 - Nunca diga que fez algo que uma ferramenta não confirmou.
 
 Suas respostas são faladas em voz alta: uma ou duas frases curtas, sem markdown, \
@@ -39,6 +47,12 @@ sem listas, sem IDs internos."""
 _NULLABLE_STR = {"type": ["string", "null"]}
 
 TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "list_accounts",
+        "description": "Lista as contas de fabricante (SmartThings, Smart Life/Tuya, LG ThinQ): quais estão conectadas e como conectar as outras.",
+        "strict": True,
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
     {
         "name": "list_devices",
         "description": "Lista os dispositivos cadastrados (id, nome, cômodo, tipo, comandos aceitos e estado atual). Filtre por cômodo quando o pedido citar um.",
@@ -114,6 +128,17 @@ class HomeAgent:
         self._conversations: dict[str, list[dict[str, Any]]] = {}
 
     async def _run_tool(self, name: str, args: dict[str, Any]) -> Any:
+        if name == "list_accounts":
+            connected = self.hub.accounts.connected() if self.hub.accounts else []
+            return [
+                {
+                    "id": key,
+                    "label": meta["label"],
+                    "how": meta["method"],
+                    "connected": key in connected or key in self.hub.adapters,
+                }
+                for key, meta in PROVIDERS.items()
+            ]
         if name == "list_devices":
             devices = self.hub.registry.in_room(args["room"]) if args.get("room") else self.hub.registry.all()
             out = []

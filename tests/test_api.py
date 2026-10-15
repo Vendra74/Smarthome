@@ -74,3 +74,66 @@ def test_integrations_report_discovery_errors(hub):
         assert client.get("/integrations").json() == [
             {"id": "smartthings", "label": "SmartThings", "status": "error", "detail": "SmartThings: 401 Unauthorized"}
         ]
+
+
+def test_accounts_flow(hub, tmp_path, monkeypatch):
+    from smarthome.accounts import AccountStore
+    from smarthome.config import HomeConfig
+    from tests.test_accounts import FakeLoginControl
+
+    monkeypatch.delenv("SMARTTHINGS_CLIENT_ID", raising=False)
+    hub.home = HomeConfig(id="casa", name="Casa")
+    hub.accounts = AccountStore(tmp_path / "accounts")
+    app = create_app(hub=hub)
+    with TestClient(app) as client:
+        from smarthome.accounts import TuyaQRLogin
+
+        app.state.tuya_login = TuyaQRLogin(FakeLoginControl(confirmed_after=2))
+        accounts = {a["id"]: a for a in client.get("/accounts").json()}
+        assert accounts["smartthings"]["status"] == "unavailable"  # sem client id da empresa
+        assert accounts["tuya"]["status"] == "available" and accounts["tuya"]["method"] == "qr"
+        assert client.post("/accounts/smartthings/start").status_code == 503
+
+        qr = client.post("/accounts/tuya/qr", json={"user_code": "AB12"}).json()
+        assert qr["qr"].startswith("data:image/svg+xml")
+        poll = {"token": qr["token"], "user_code": "AB12"}
+        assert client.post("/accounts/tuya/poll", json=poll).json() == {"status": "pending"}
+        assert client.post("/accounts/tuya/poll", json=poll).json() == {"status": "connected"}
+        assert "tuya" in hub.adapters and hub.accounts.load("tuya")["terminal_id"] == "t1"
+        accounts = {a["id"]: a for a in client.get("/accounts").json()}
+        assert accounts["tuya"]["status"] == "connected"
+        assert {i["id"]: i["status"] for i in client.get("/integrations").json()}["tuya"] == "active"
+
+        assert client.post("/accounts/tuya/qr", json={"user_code": "ruim"}).status_code == 400
+
+        assert client.post("/accounts/lg_thinq", json={"token": " tok "}).json()["status"] == "connected"
+        assert hub.accounts.load("lg_thinq")["token"] == "tok" and "lg_thinq" in hub.adapters
+
+        assert client.delete("/accounts/tuya").status_code == 204
+        assert "tuya" not in hub.adapters and hub.accounts.load("tuya") is None
+        assert client.delete("/accounts/zigbee").status_code == 404
+
+
+def test_smartthings_oauth_callback(hub, tmp_path, monkeypatch):
+    import httpx
+
+    from smarthome.accounts import AccountStore, SmartThingsOAuth
+    from smarthome.config import HomeConfig
+    from tests.test_accounts import oauth_transport
+
+    monkeypatch.setenv("SMARTTHINGS_CLIENT_ID", "cid")
+    monkeypatch.setenv("SMARTTHINGS_CLIENT_SECRET", "sec")
+    hub.home = HomeConfig(id="casa", name="Casa")
+    hub.accounts = AccountStore(tmp_path / "accounts")
+    app = create_app(hub=hub)
+    app.state.oauth = SmartThingsOAuth("cid", "sec", "http://localhost:8000/auth/smartthings/callback", oauth_transport([]))
+    with TestClient(app) as client:
+        url = httpx.URL(client.post("/accounts/smartthings/start").json()["url"])
+        assert url.host == "api.smartthings.com"
+        r = client.get("/auth/smartthings/callback", params={"code": "c0de", "state": url.params["state"]}, follow_redirects=False)
+        assert r.status_code == 307 and r.headers["location"] == "/?conta=smartthings"
+        assert hub.accounts.load("smartthings")["access_token"] == "A1" and "smartthings" in hub.adapters
+        r = client.get("/auth/smartthings/callback", params={"code": "x", "state": "falso"}, follow_redirects=False)
+        assert "erro=recusado" in r.headers["location"]
+        r = client.get("/auth/smartthings/callback", params={"error": "access_denied"}, follow_redirects=False)
+        assert "erro=access_denied" in r.headers["location"]

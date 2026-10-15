@@ -44,6 +44,17 @@ class Hub:
         # Último erro de descoberta por adaptador, para o app mostrar o motivo.
         self.discovery_errors: dict[str, str] = {}
         self.adapters = {a.name: a for a in adapters}
+        # Contas de fabricante ligadas pela tela "Contas" (AccountStore); None nos testes.
+        self.accounts: Any = None
+
+    def set_adapter(self, adapter: Adapter) -> None:
+        """Liga (ou troca) um adaptador em tempo de execução, ex.: quando uma conta é conectada."""
+        self.adapters[adapter.name] = adapter
+        self.discovery_errors.pop(adapter.name, None)
+
+    def remove_adapter(self, name: str) -> None:
+        self.adapters.pop(name, None)
+        self.discovery_errors.pop(name, None)
 
     def _adapter(self, device: Device) -> Adapter:
         try:

@@ -83,23 +83,42 @@ dispositivo móvel* e ligue a TV pelo controle uma vez com a central rodando,
 para ela aprender o IP e o MAC. Na primeira vez que a central falar direto com
 a TV, a TV pede autorização na tela; aceite.
 
-## Intelbras Izy Smart (Tuya)
+## Contas: entrar com a conta, sem chave nem token
 
-Os aparelhos do Izy Smart (e de Smart Life / Tuya Smart) entram pela API de
-nuvem da Tuya. Uma vez só:
+Quem usa a central não cria conta de desenvolvedor nem copia token. O botão
+*Contas* do app liga cada fabricante pela própria conta do usuário:
 
-1. Crie uma conta em https://iot.tuya.com e, em *Cloud > Development*, um
-   projeto ("Smart Home", data center *Western America* para o Brasil).
-2. No projeto, aba *Devices > Link Tuya App Account*, escolha *Add App Account*
-   e leia o QR code com o app Izy Smart (*Eu > ícone de leitura no canto*).
-   Os aparelhos do app aparecem na lista do projeto.
-3. Copie *Access ID* e *Access Secret* da visão geral do projeto para o `.env`
-   (`TUYA_ACCESS_ID` e `TUYA_ACCESS_SECRET`), instale com
-   `pip install -e ".[tuya]"` e reinicie a central.
+- **SmartThings (Samsung).** *Conectar* abre o login da Samsung e volta para a
+  central com a autorização; o token é renovado sozinho. Para isso funcionar,
+  quem publica a central registra uma SmartApp uma vez (ver abaixo).
+- **Smart Life / Tuya Smart.** No app: *Eu > Configurações > Conta e
+  segurança > Código de usuário*. Digite o código em *Contas*, leia o QR code
+  que a central mostra com o scanner do app e confirme. Sem conta na
+  plataforma Tuya, sem projeto, sem chave. Aparelhos do **Intelbras Izy Smart**
+  não podem ser ligados por fora do app da Intelbras: pareie-os de novo no
+  Smart Life (mesmo botão de adicionar aparelho) e conecte o Smart Life.
+- **LG ThinQ.** A LG só oferece token pessoal por enquanto: gere em
+  https://connect-pat.lgthinq.com com a conta do app ThinQ e cole em *Contas*.
+  O agente também explica isso quando alguém pede um aparelho LG.
 
-Pronto: *Adicionar* lista os aparelhos do Izy Smart. Lâmpadas ganham
-liga/desliga e brilho; tomadas e interruptores, liga/desliga. O plano
-gratuito da Tuya vence a cada seis meses e é renovado com um clique no site.
+As contas ficam em `data/homes/<id>/accounts/` (fora do git, só o dono lê).
+Depois de conectar, *Adicionar* lista os aparelhos da conta; o agente também
+cadastra por conversa ("configura a luz nova do quarto").
+
+**Registro da SmartApp (uma vez, por quem publica):** com a
+[CLI da SmartThings](https://github.com/SmartThingsCommunity/smartthings-cli),
+`smartthings apps:create`, tipo *API_ONLY*, escopos `r:devices:*`,
+`x:devices:*` e `r:locations:*`, e redirect
+`<endereço da central>/auth/smartthings/callback` (por exemplo
+`http://localhost:8000/auth/smartthings/callback`). Copie o *client id* e o
+*client secret* para `SMARTTHINGS_CLIENT_ID` e `SMARTTHINGS_CLIENT_SECRET` no
+`.env`; se a central é aberta por outro endereço, defina `SMARTHOME_PUBLIC_URL`.
+Até isso existir, *Contas* mostra a Samsung como "ainda não liberada" e o
+token pessoal (`SMARTTHINGS_TOKEN`) continua valendo para desenvolvimento.
+
+Para desenvolvimento, a Tuya também aceita as chaves de um projeto em
+https://iot.tuya.com (`TUYA_ACCESS_ID` e `TUYA_ACCESS_SECRET`, extra
+`pip install -e ".[tuya]"`); a conta conectada em *Contas* tem prioridade.
 
 ## Uma pasta por casa
 

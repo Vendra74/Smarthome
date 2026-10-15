@@ -33,6 +33,7 @@ fabricante novo basta escrever um adaptador.
 |---|---|---|
 | Modelo | `src/smarthome/models.py` | Dispositivo, tipo, comandos, estado |
 | Casa | `src/smarthome/config.py` | Carrega a pasta da casa e monta o Hub dela |
+| Contas | `src/smarthome/accounts.py` | Contas de fabricante ligadas pelo usuário (OAuth, QR, token), guardadas na pasta da casa |
 | Cadastro | `src/smarthome/registry.py` | Lista de dispositivos com cômodo e apelidos, salva em YAML |
 | Hub | `src/smarthome/hub.py` | Valida e despacha comandos, descobre e cadastra dispositivos |
 | Adaptadores | `src/smarthome/adapters/` | SmartThings, LG ThinQ, TV Samsung, TV LG, virtual |
@@ -64,13 +65,16 @@ Para virar produto, o caminho previsto é:
    para a central da casa certa.
 3. **Banco de dados** no lugar dos YAML quando houver muitas casas; a
    interface do cadastro (`DeviceRegistry`) já isola essa troca.
-4. **OAuth por casa** com SmartThings e Alexa, em vez de token pessoal.
+4. **OAuth por casa** com a Alexa (a SmartThings já entra por conta, ver
+   "Contas").
 
 ## Como cada fabricante entra
 
 - **SmartThings (nuvem, API oficial).** Caminho principal para lâmpadas,
   tomadas e ar-condicionado que já estão no app SmartThings, e também para TVs
-  Samsung. Token pessoal em `SMARTTHINGS_TOKEN`. A central lista o que existe
+  Samsung. O usuário entra com a conta Samsung (OAuth da SmartApp registrada
+  pela empresa; `accounts.py` renova o token sozinho). Token pessoal em
+  `SMARTTHINGS_TOKEN` só para desenvolvimento. A central lista o que existe
   na conta (`/discover`) e o usuário escolhe o que cadastrar.
 - **LG ThinQ (nuvem, API oficial ThinQ Connect).** Eletrodomésticos do app
   LG ThinQ, pelo SDK oficial `thinqconnect`. Ar-condicionado com liga/desliga,
@@ -87,11 +91,14 @@ Para virar produto, o caminho previsto é:
   motivo de a central existir dentro da casa: a nuvem sozinha não acorda a TV.
 - **TV LG webOS (rede local).** `aiowebostv`: desligar, volume, mudo, abrir app.
   Ligar por Wake-on-LAN. Pareamento uma vez na TV gera a `client_key`.
-- **Tuya (nuvem, API oficial via `tinytuya`).** Intelbras Izy Smart, Smart
-  Life e Tuya Smart: lâmpadas (liga/desliga, brilho), tomadas e interruptores.
-  Chaves de um projeto em iot.tuya.com. Controle local (sem nuvem) com as
-  chaves locais dos aparelhos é o próximo passo, no mesmo espírito da
-  recuperação da TV.
+- **Tuya pela conta do app (`tuya_sharing.py`).** Smart Life e Tuya Smart
+  pelo SDK de compartilhamento de dispositivos (o caminho do Home Assistant):
+  o usuário lê um QR code no app e pronto. Lâmpadas (liga/desliga, brilho),
+  tomadas e interruptores. O adaptador por chaves de projeto (`tuya.py`,
+  `tinytuya`) continua para desenvolvimento; os dois usam o nome `tuya` e o
+  mesmo `device_id`, então o cadastro vale nos dois. Intelbras Izy Smart não
+  aceita vínculo externo: os aparelhos são pareados de novo no Smart Life.
+  Controle local (sem nuvem) com as chaves locais é o próximo passo.
 - **Outros (próximas fases).** Philips Hue, ar-condicionado por infravermelho
   (Broadlink), Matter. Cada um vira um adaptador.
 
@@ -158,13 +165,15 @@ pessoal ou chave no `.env` é trabalho de quem publica o app, feito uma vez.
 O usuário final só faz "entrar com a conta" ou lê um QR code; o resto é do
 agente. O que isso exige, por ordem:
 
-1. **Login por conta, não por chave.** SmartThings por OAuth (SmartApp
-   registrada pela empresa; o usuário clica em "conectar Samsung"). Tuya por
-   QR code lido com Smart Life ou Tuya Smart, sem conta na plataforma Tuya
-   (SDK de compartilhamento de dispositivos, o mesmo caminho do Home
-   Assistant). LG ThinQ só oferece token pessoal por enquanto: o agente guia a
-   pessoa passo a passo. Apps de marca fechados (Intelbras Izy Smart) não
-   permitem vínculo externo: o agente orienta a parear no Smart Life.
+1. **Login por conta, não por chave (pronto: tela "Contas").** SmartThings
+   por OAuth (SmartApp registrada pela empresa; o usuário clica em "Conectar"
+   e entra na Samsung; `GET /auth/smartthings/callback` recebe o retorno).
+   Tuya por QR code lido com Smart Life ou Tuya Smart, sem conta na plataforma
+   Tuya (`POST /accounts/tuya/qr` gera o QR, `/accounts/tuya/poll` espera a
+   confirmação). LG ThinQ só oferece token pessoal por enquanto: o agente guia
+   a pessoa e o token é colado em "Contas". Apps de marca fechados (Intelbras
+   Izy Smart) não permitem vínculo externo: o agente orienta a parear no Smart
+   Life. Conectar uma conta liga o adaptador na hora, sem reiniciar.
 2. **Matter como padrão para aparelho novo.** A central vira controlador
    Matter (`python-matter-server`): lâmpadas, tomadas e sensores entram pelo
    QR da caixa, sem nuvem de fabricante.

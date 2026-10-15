@@ -45,7 +45,7 @@ def test_integration_status_explains_what_is_missing(tmp_path, monkeypatch):
     monkeypatch.delenv("SMARTTHINGS_TOKEN", raising=False)
     status = {i["id"]: i for i in build_hub("c", data_dir=tmp_path).integrations}
     assert status["smartthings"]["status"] == "missing_token"
-    assert "SMARTTHINGS_TOKEN" in status["smartthings"]["detail"]
+    assert "Contas" in status["smartthings"]["detail"]
     assert status["lg_thinq"]["status"] == "off"
 
     monkeypatch.setenv("SMARTTHINGS_TOKEN", "x")

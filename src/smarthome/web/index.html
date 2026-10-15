@@ -13,7 +13,10 @@
 <body>
   <header class="top">
     <h1 id="home-name">Casa</h1>
-    <button id="add-device" class="ghost" type="button">Adicionar</button>
+    <div class="top-actions">
+      <button id="open-accounts" class="ghost" type="button">Contas</button>
+      <button id="add-device" class="ghost" type="button">Adicionar</button>
+    </div>
   </header>
 
   <section class="assistant" aria-label="Assistente">
@@ -69,6 +72,41 @@
         <button type="submit" value="save">Salvar</button>
       </menu>
     </form>
+  </dialog>
+
+  <dialog id="accounts-dialog">
+    <h2>Contas</h2>
+    <p class="hint">Entre com a conta de cada app que você usa em casa. A central encontra os aparelhos sozinha.</p>
+    <div id="accounts-list"></div>
+
+    <section id="tuya-flow" class="account-flow" hidden>
+      <h3>Smart Life / Tuya</h3>
+      <p class="hint">No app Smart Life (ou Tuya Smart): <b>Eu › Configurações › Conta e segurança › Código de usuário</b>. Digite o código aqui e depois leia o QR code com o app (botão de scanner no canto superior direito).</p>
+      <form id="tuya-form">
+        <label>Código de usuário <input name="user_code" required autocomplete="off" placeholder="ex.: AB1cd2EF"></label>
+        <menu>
+          <button type="submit">Gerar QR code</button>
+        </menu>
+      </form>
+      <div id="tuya-qr" hidden>
+        <img alt="QR code para ler no Smart Life">
+        <p class="hint">Aguardando a confirmação no app...</p>
+      </div>
+    </section>
+
+    <section id="lg-flow" class="account-flow" hidden>
+      <h3>LG ThinQ</h3>
+      <p class="hint">A LG ainda não tem login por conta para apps de terceiros. Gere um token pessoal em <a href="https://connect-pat.lgthinq.com" target="_blank" rel="noopener">connect-pat.lgthinq.com</a> (entre com a conta do app ThinQ) e cole aqui. Ele fica só nesta central.</p>
+      <form id="lg-form">
+        <label>Token pessoal <input name="token" required autocomplete="off"></label>
+        <menu><button type="submit">Conectar</button></menu>
+      </form>
+    </section>
+
+    <p id="accounts-error" class="error" hidden></p>
+    <menu>
+      <button type="button" class="ghost" id="accounts-close">Fechar</button>
+    </menu>
   </dialog>
 
   <template id="device-card">

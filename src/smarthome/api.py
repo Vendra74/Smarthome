@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -9,11 +10,13 @@ from typing import Any
 
 import anthropic
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from .accounts import PROVIDERS, OAuthError, SmartThingsOAuth, TuyaQRLogin
 from .agent import HomeAgent
-from .config import build_hub
+from .config import account_adapter, build_hub, integration_status
 from .hub import Hub
 from .models import CommandRequest, CommandResult, Device, DeviceState, DeviceType, DiscoveredDevice
 
@@ -53,6 +56,27 @@ class DeviceView(Device):
     state: DeviceState | None = None
 
 
+class Account(BaseModel):
+    id: str
+    label: str
+    method: str  # oauth, qr, token
+    status: str  # connected, available, unavailable
+    detail: str
+
+
+class TuyaQRRequest(BaseModel):
+    user_code: str
+
+
+class TuyaPollRequest(BaseModel):
+    token: str
+    user_code: str
+
+
+class TokenAccount(BaseModel):
+    token: str
+
+
 WEB_DIR = Path(__file__).parent / "web"
 log = logging.getLogger(__name__)
 
@@ -78,9 +102,39 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
         yield
 
     app = FastAPI(title="Central da Casa", version="0.1.0", lifespan=lifespan)
+    app.state.oauth = None
+    app.state.tuya_login = None
 
     def _hub() -> Hub:
         return app.state.hub
+
+    def _accounts():
+        if _hub().accounts is None:
+            raise HTTPException(503, "Esta central não guarda contas (sem pasta da casa)")
+        return _hub().accounts
+
+    def _oauth() -> SmartThingsOAuth:
+        if app.state.oauth is None:
+            app.state.oauth = SmartThingsOAuth.from_env()
+        if app.state.oauth is None:
+            raise HTTPException(
+                503, "Conexão com a Samsung ainda não liberada nesta central (faltam SMARTTHINGS_CLIENT_ID e SECRET)"
+            )
+        return app.state.oauth
+
+    def _tuya_login() -> TuyaQRLogin:
+        if app.state.tuya_login is None:
+            app.state.tuya_login = TuyaQRLogin()
+        return app.state.tuya_login
+
+    def _activate(provider: str) -> None:
+        """Conta salva: liga o adaptador dela agora, sem reiniciar a central."""
+        hub = _hub()
+        adapter = account_adapter(provider, hub.accounts, hub.home) if hub.home else None
+        if adapter is not None:
+            hub.set_adapter(adapter)
+        if hub.home:
+            hub.integrations = integration_status(hub.home, hub.accounts)
 
     @app.get("/home", response_model=HomeInfo)
     async def home_info() -> HomeInfo:
@@ -135,6 +189,78 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
                 item = {**item, "status": "error", "detail": error}
             out.append(Integration(**item))
         return out
+
+    @app.get("/accounts", response_model=list[Account])
+    async def accounts() -> list[Account]:
+        """Contas de fabricante: o que está conectado e como conectar o resto."""
+        connected = _hub().accounts.connected() if _hub().accounts else []
+        out = []
+        for key, meta in PROVIDERS.items():
+            if key in connected:
+                status, detail = "connected", "conectada"
+            elif key == "smartthings" and SmartThingsOAuth.from_env() is None:
+                status, detail = "unavailable", "ainda não liberada nesta central"
+            elif key in _hub().adapters:
+                status, detail = "connected", "conectada por chave da central"
+            else:
+                status, detail = "available", "não conectada"
+            out.append(Account(id=key, status=status, detail=detail, **meta))
+        return out
+
+    @app.post("/accounts/smartthings/start")
+    async def smartthings_start() -> dict[str, str]:
+        _accounts()
+        return {"url": _oauth().authorize_url()}
+
+    @app.get("/auth/smartthings/callback")
+    async def smartthings_callback(code: str = "", state: str = "", error: str = ""):
+        if error or not code:
+            return RedirectResponse(f"/?conta=smartthings&erro={error or 'sem_codigo'}")
+        try:
+            tokens = await _oauth().exchange(code, state)
+        except OAuthError as exc:
+            log.warning("OAuth SmartThings falhou: %s", exc)
+            return RedirectResponse("/?conta=smartthings&erro=recusado")
+        _accounts().save("smartthings", tokens)
+        _activate("smartthings")
+        return RedirectResponse("/?conta=smartthings")
+
+    @app.post("/accounts/tuya/qr")
+    async def tuya_qr(body: TuyaQRRequest) -> dict[str, str]:
+        _accounts()
+        try:
+            return await asyncio.to_thread(_tuya_login().start, body.user_code.strip())
+        except OAuthError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, f"Smart Life não respondeu: {exc}") from exc
+
+    @app.post("/accounts/tuya/poll")
+    async def tuya_poll(body: TuyaPollRequest) -> dict[str, Any]:
+        try:
+            account = await asyncio.to_thread(_tuya_login().poll, body.token, body.user_code.strip())
+        except Exception as exc:
+            raise HTTPException(502, f"Smart Life não respondeu: {exc}") from exc
+        if account is None:
+            return {"status": "pending"}
+        _accounts().save("tuya", account)
+        _activate("tuya")
+        return {"status": "connected"}
+
+    @app.post("/accounts/lg_thinq", response_model=Account)
+    async def lg_thinq_account(body: TokenAccount) -> Account:
+        _accounts().save("lg_thinq", {"token": body.token.strip()})
+        _activate("lg_thinq")
+        return Account(id="lg_thinq", status="connected", detail="conectada", **PROVIDERS["lg_thinq"])
+
+    @app.delete("/accounts/{provider}", status_code=204)
+    async def disconnect(provider: str) -> None:
+        if provider not in PROVIDERS:
+            raise HTTPException(404, "Conta desconhecida")
+        _accounts().delete(provider)
+        _hub().remove_adapter(provider)
+        if _hub().home:
+            _hub().integrations = integration_status(_hub().home, _hub().accounts)
 
     @app.get("/discover", response_model=list[DiscoveredDevice])
     async def discover(adapter: str | None = None) -> list[DiscoveredDevice]:

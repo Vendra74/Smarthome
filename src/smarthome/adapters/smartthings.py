@@ -1,18 +1,20 @@
 """SmartThings (Samsung) via API REST oficial.
 
 Cobre tudo que estiver no app SmartThings: lâmpadas, tomadas, ar-condicionado,
-e também TVs Samsung. Autenticação por Personal Access Token
-(https://account.smartthings.com/tokens), na variável SMARTTHINGS_TOKEN.
+e também TVs Samsung. Autenticação pela conta (OAuth, tela "Contas") ou, para
+quem publica o app, por Personal Access Token na variável SMARTTHINGS_TOKEN.
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
 
+from ..accounts import OAuthError
 from ..models import Command, Device, DeviceState, DeviceType, DiscoveredDevice
 from .base import Adapter, AdapterError, DeviceUnreachable
 
@@ -75,13 +77,18 @@ def _guess_type(capabilities: set[str]) -> DeviceType:
 class SmartThingsAdapter(Adapter):
     name = "smartthings"
 
-    def __init__(self, token: str, transport: httpx.AsyncBaseTransport | None = None) -> None:
-        self._client = httpx.AsyncClient(
-            base_url=API_URL,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10.0,
-            transport=transport,
-        )
+    def __init__(
+        self,
+        token: str | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+        token_provider: Callable[..., Awaitable[str]] | None = None,
+    ) -> None:
+        """`token` é um token fixo; `token_provider(force=False)` entrega o token da conta
+        conectada por OAuth e, com `force=True`, renova (chamado quando a API responde 401)."""
+        if token is None and token_provider is None:
+            raise ValueError("SmartThingsAdapter precisa de token ou token_provider")
+        self._token, self._token_provider = token, token_provider
+        self._client = httpx.AsyncClient(base_url=API_URL, timeout=10.0, transport=transport)
         self._state_cache: dict[str, tuple[float, DeviceState]] = {}
         self._health_cache: dict[str, tuple[float, bool]] = {}
 
@@ -92,10 +99,20 @@ class SmartThingsAdapter(Adapter):
         except KeyError as exc:
             raise AdapterError(f"{device.id}: falta config.device_id do SmartThings") from exc
 
+    async def _auth(self, force: bool = False) -> dict[str, str]:
+        token = self._token if self._token_provider is None else await self._token_provider(force=force)
+        return {"Authorization": f"Bearer {token}"}
+
     async def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
         try:
-            response = await self._client.request(method, url, **kwargs)
-            response.raise_for_status()
+            try:
+                response = await self._client.request(method, url, headers=await self._auth(), **kwargs)
+                if response.status_code == 401 and self._token_provider is not None:
+                    # token da conta venceu: renova uma vez e repete
+                    response = await self._client.request(method, url, headers=await self._auth(force=True), **kwargs)
+                response.raise_for_status()
+            except OAuthError as exc:
+                raise AdapterError(f"SmartThings: {exc}") from exc
         except httpx.HTTPStatusError as exc:
             log.warning("SmartThings %s %s -> %s: %s", method, url, exc.response.status_code, exc.response.text[:500])
             raise AdapterError(f"SmartThings: {_describe_error(exc.response)}") from exc

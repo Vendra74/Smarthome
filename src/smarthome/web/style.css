@@ -214,3 +214,18 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; ma
 #discovered p.integration::before { content: "● "; }
 #discovered p.integration.ok::before { color: #3a9a5b; }
 #discovered p.integration.warn { color: var(--danger); }
+
+.top-actions { display: flex; gap: 8px; }
+.hint { margin: 0 0 10px; font-size: .9rem; color: var(--muted); }
+.account { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.account .name { font-weight: 600; }
+.account .detail { margin: 2px 0 0; font-size: .85rem; color: var(--muted); }
+.account .detail::before { content: "● "; }
+.account.connected .detail::before { color: #3a9a5b; }
+.account button { white-space: nowrap; }
+.account-flow { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.account-flow h3 { margin: 0 0 6px; font-size: 1rem; }
+.account-flow[hidden] { display: none; }
+#tuya-qr { text-align: center; margin-top: 10px; }
+#tuya-qr img { width: min(260px, 70vw); background: #fff; border-radius: 10px; padding: 8px; }
+#tuya-qr[hidden] { display: none; }

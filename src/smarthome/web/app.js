@@ -407,7 +407,118 @@ $("#ask-form").addEventListener("submit", (event) => {
   ask($("#ask-input").value);
 });
 setupVoice();
+// ---------- Contas de fabricante ----------
+
+function setupAccountsDialog() {
+  const dialog = $("#accounts-dialog");
+  const list = $("#accounts-list");
+  const error = $("#accounts-error");
+  const tuyaFlow = $("#tuya-flow");
+  const lgFlow = $("#lg-flow");
+  const qrBox = $("#tuya-qr");
+  let polling = null;
+
+  const fail = (message) => { error.textContent = message; error.hidden = false; };
+  const stopPolling = () => { if (polling) clearInterval(polling); polling = null; };
+
+  async function render() {
+    error.hidden = true;
+    const accounts = await api("/accounts");
+    list.replaceChildren();
+    for (const acc of accounts) {
+      const row = document.createElement("div");
+      row.className = `account ${acc.status}`;
+      const info = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = acc.label;
+      const detail = document.createElement("p");
+      detail.className = "detail";
+      detail.textContent = acc.detail;
+      info.append(name, detail);
+      const button = document.createElement("button");
+      button.type = "button";
+      if (acc.status === "connected") {
+        button.className = "ghost";
+        button.textContent = "Desconectar";
+        button.addEventListener("click", async () => {
+          try { await api(`/accounts/${acc.id}`, { method: "DELETE" }); await render(); await load(); }
+          catch (e) { fail(e.message); }
+        });
+      } else {
+        button.textContent = "Conectar";
+        button.disabled = acc.status === "unavailable";
+        button.addEventListener("click", () => connect(acc.id));
+      }
+      row.append(info, button);
+      list.append(row);
+    }
+  }
+
+  async function connect(id) {
+    error.hidden = true;
+    tuyaFlow.hidden = id !== "tuya";
+    lgFlow.hidden = id !== "lg_thinq";
+    if (id === "smartthings") {
+      try {
+        const { url } = await api("/accounts/smartthings/start", { method: "POST" });
+        window.location.assign(url); // volta para cá depois do login na Samsung
+      } catch (e) { fail(e.message); }
+    }
+  }
+
+  $("#tuya-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const userCode = event.target.user_code.value.trim();
+    stopPolling();
+    try {
+      const { token, qr } = await api("/accounts/tuya/qr", { method: "POST", body: { user_code: userCode } });
+      qrBox.querySelector("img").src = qr;
+      qrBox.hidden = false;
+      polling = setInterval(async () => {
+        try {
+          const result = await api("/accounts/tuya/poll", { method: "POST", body: { token, user_code: userCode } });
+          if (result.status === "connected") {
+            stopPolling();
+            qrBox.hidden = true;
+            tuyaFlow.hidden = true;
+            showReply("Conta Smart Life conectada. Use Adicionar para cadastrar os aparelhos.");
+            await render();
+          }
+        } catch (e) { stopPolling(); fail(e.message); }
+      }, 2000);
+    } catch (e) { fail(e.message); }
+  });
+
+  $("#lg-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      await api("/accounts/lg_thinq", { method: "POST", body: { token: event.target.token.value } });
+      event.target.reset();
+      lgFlow.hidden = true;
+      await render();
+    } catch (e) { fail(e.message); }
+  });
+
+  $("#open-accounts").addEventListener("click", async () => {
+    tuyaFlow.hidden = lgFlow.hidden = qrBox.hidden = true;
+    dialog.showModal();
+    try { await render(); } catch (e) { fail(e.message); }
+  });
+  $("#accounts-close").addEventListener("click", () => { stopPolling(); dialog.close(); });
+  dialog.addEventListener("close", stopPolling);
+
+  // Volta do login da Samsung: /?conta=smartthings[&erro=...]
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("conta")) {
+    history.replaceState(null, "", "/");
+    const err = params.get("erro");
+    showReply(err ? "A conexão com a Samsung não foi concluída. Tente de novo em Contas." : "Conta SmartThings conectada. Use Adicionar para cadastrar os aparelhos.");
+  }
+}
+
 setupAddDialog();
+setupAccountsDialog();
 load().catch((error) => showReply(`Não consegui carregar a casa: ${error.message}`));
 setInterval(refreshStates, 15000);
 document.addEventListener("visibilitychange", refreshStates);
