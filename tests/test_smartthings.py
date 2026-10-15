@@ -98,3 +98,24 @@ def test_other_errors_keep_the_smartthings_reason():
     tv = Device(id="tv", name="TV", type=DeviceType.TV, adapter="smartthings", config={"device_id": "tv"})
     with pytest.raises(AdapterError, match=r"422 .*unsupported command"):
         asyncio.run(adapter.execute(tv, Command.TURN_OFF, {}))
+
+
+def test_tv_409_with_health_online_still_gets_a_clear_message():
+    """TV Samsung em standby: a saúde ainda diz ONLINE, mas o comando volta 409."""
+    import pytest
+
+    from smarthome.adapters.base import AdapterError
+
+    def handler(request):
+        if request.url.path.endswith("/health"):
+            return httpx.Response(200, json={"deviceId": "tv", "state": "ONLINE"})
+        if request.url.path.endswith("/commands"):
+            return httpx.Response(409, json={"error": {"code": "ConstraintViolationError",
+                                                       "message": "The request is malformed.",
+                                                       "details": [{"message": "Device is offline"}]}})
+        return httpx.Response(200, json={"components": {"main": {"switch": {"switch": {"value": "on"}}}}})
+
+    adapter = SmartThingsAdapter("token", transport=httpx.MockTransport(handler))
+    tv = Device(id="tv", name="TV da sala", type=DeviceType.TV, adapter="smartthings", config={"device_id": "tv"})
+    with pytest.raises(AdapterError, match=r"TV da sala não respondeu.*Device is offline.*Ligar com dispositivo móvel"):
+        asyncio.run(adapter.execute(tv, Command.TURN_OFF, {}))

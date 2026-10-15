@@ -7,6 +7,7 @@ e também TVs Samsung. Autenticação por Personal Access Token
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
@@ -15,6 +16,7 @@ from ..models import Command, Device, DeviceState, DeviceType, DiscoveredDevice
 from .base import Adapter, AdapterError
 
 API_URL = "https://api.smartthings.com/v1"
+log = logging.getLogger(__name__)
 
 
 def _to_smartthings(command: Command, params: dict[str, Any]) -> tuple[str, str, list[Any]]:
@@ -86,6 +88,7 @@ class SmartThingsAdapter(Adapter):
             response = await self._client.request(method, url, **kwargs)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
+            log.warning("SmartThings %s %s -> %s: %s", method, url, exc.response.status_code, exc.response.text[:500])
             raise AdapterError(f"SmartThings: {_describe_error(exc.response)}") from exc
         except httpx.HTTPError as exc:
             raise AdapterError(f"SmartThings: {exc}") from exc
@@ -115,10 +118,15 @@ class SmartThingsAdapter(Adapter):
         try:
             await self._request("POST", f"/devices/{self._external_id(device)}/commands", json=body)
         except AdapterError as exc:
-            if "409" in str(exc) and not await self._is_online(device):
+            # 409 é a SmartThings sem conseguir falar com o aparelho agora. O endpoint de saúde
+            # costuma confirmar (OFFLINE), mas em TVs Samsung em standby ele ainda diz ONLINE
+            # por um tempo; nesse caso o 409 por si só já indica que a TV não respondeu.
+            if "409" in str(exc) and (device.type == DeviceType.TV or not await self._is_online(device)):
+                reason = str(exc).partition("(")[2].rstrip(")")
+                hint = f" (SmartThings: {reason})" if reason else ""
                 raise AdapterError(
-                    f"{device.name} está desligada ou fora da rede, e a SmartThings não a alcança. "
-                    "Para ligar pela rede, ative na TV a opção 'Ligar com dispositivo móvel'."
+                    f"{device.name} não respondeu à SmartThings: está desligada, em standby ou fora da rede{hint}. "
+                    "Para ligar pela rede, ative na TV 'Ligar com dispositivo móvel'."
                 ) from exc
             raise
         return await self.get_state(device)
