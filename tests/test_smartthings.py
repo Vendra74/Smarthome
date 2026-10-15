@@ -54,3 +54,47 @@ def test_discover_skips_already_registered(tmp_path):
     registry.add(Device(id="luz", name="Luz", type=DeviceType.LIGHT, adapter="smartthings", config={"device_id": "abc"}))
     found = asyncio.run(Hub(registry, [adapter]).discover())
     assert [(d.external_id, d.suggested_type) for d in found] == [("ar1", DeviceType.AC)]
+
+
+def make_offline_transport():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/health"):
+            return httpx.Response(200, json={"deviceId": "tv", "state": "OFFLINE"})
+        if request.url.path.endswith("/commands"):
+            return httpx.Response(
+                409,
+                json={"error": {"code": "ConstraintViolationError", "message": "The request is malformed.",
+                                "details": [{"code": "DeviceOfflineError", "message": "Device is offline"}]}},
+            )
+        return httpx.Response(200, json={"components": {"main": {"switch": {"switch": {"value": "on"}}}}})
+
+    return httpx.MockTransport(handler)
+
+
+def test_offline_tv_gets_a_clear_message_and_shows_as_off():
+    import pytest
+
+    from smarthome.adapters.base import AdapterError
+
+    adapter = SmartThingsAdapter("token", transport=make_offline_transport())
+    tv = Device(id="tv-sala", name="TV da sala", type=DeviceType.TV, adapter="smartthings", config={"device_id": "tv"})
+
+    state = asyncio.run(adapter.get_state(tv))
+    assert state.online is False and state.power is False  # o "on" guardado é velho
+
+    with pytest.raises(AdapterError, match="Ligar com dispositivo móvel"):
+        asyncio.run(adapter.execute(tv, Command.TURN_OFF, {}))
+
+
+def test_other_errors_keep_the_smartthings_reason():
+    import pytest
+
+    from smarthome.adapters.base import AdapterError
+
+    def handler(request):
+        return httpx.Response(422, json={"error": {"code": "ConstraintViolationError", "message": "unsupported command"}})
+
+    adapter = SmartThingsAdapter("token", transport=httpx.MockTransport(handler))
+    tv = Device(id="tv", name="TV", type=DeviceType.TV, adapter="smartthings", config={"device_id": "tv"})
+    with pytest.raises(AdapterError, match=r"422 .*unsupported command"):
+        asyncio.run(adapter.execute(tv, Command.TURN_OFF, {}))

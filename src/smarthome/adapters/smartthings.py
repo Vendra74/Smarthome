@@ -40,6 +40,17 @@ def _to_smartthings(command: Command, params: dict[str, Any]) -> tuple[str, str,
     raise AdapterError(f"Comando {command.value} não mapeado para SmartThings")
 
 
+def _describe_error(response: httpx.Response) -> str:
+    """Mensagem curta com o código e, quando a SmartThings manda, o motivo."""
+    try:
+        error = response.json().get("error", {})
+        details = "; ".join(d.get("message", "") for d in error.get("details", []) if d.get("message"))
+        reason = details or error.get("message", "")
+    except ValueError:
+        reason = ""
+    return f"{response.status_code} {response.reason_phrase}" + (f" ({reason})" if reason else "")
+
+
 def _guess_type(capabilities: set[str]) -> DeviceType:
     if "airConditionerMode" in capabilities:
         return DeviceType.AC
@@ -74,9 +85,20 @@ class SmartThingsAdapter(Adapter):
         try:
             response = await self._client.request(method, url, **kwargs)
             response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise AdapterError(f"SmartThings: {_describe_error(exc.response)}") from exc
         except httpx.HTTPError as exc:
             raise AdapterError(f"SmartThings: {exc}") from exc
         return response.json() if response.content else {}
+
+    async def _is_online(self, device: Device) -> bool:
+        """A SmartThings guarda o último estado conhecido mesmo com o aparelho fora do ar;
+        só o endpoint de saúde diz se ele está acessível agora."""
+        try:
+            data = await self._request("GET", f"/devices/{self._external_id(device)}/health")
+        except AdapterError:
+            return True  # sem resposta de saúde, assume o estado informado
+        return data.get("state", "ONLINE") != "OFFLINE"
 
     async def execute(self, device: Device, command: Command, params: dict[str, Any]) -> DeviceState:
         capability, st_command, arguments = _to_smartthings(command, params)
@@ -90,7 +112,15 @@ class SmartThingsAdapter(Adapter):
                 }
             ]
         }
-        await self._request("POST", f"/devices/{self._external_id(device)}/commands", json=body)
+        try:
+            await self._request("POST", f"/devices/{self._external_id(device)}/commands", json=body)
+        except AdapterError as exc:
+            if "409" in str(exc) and not await self._is_online(device):
+                raise AdapterError(
+                    f"{device.name} está desligada ou fora da rede, e a SmartThings não a alcança. "
+                    "Para ligar pela rede, ative na TV a opção 'Ligar com dispositivo móvel'."
+                ) from exc
+            raise
         return await self.get_state(device)
 
     async def get_state(self, device: Device) -> DeviceState:
@@ -108,8 +138,11 @@ class SmartThingsAdapter(Adapter):
             "mode": value("airConditionerMode", "airConditionerMode"),
             "volume": value("audioVolume", "volume"),
         }
+        online = await self._is_online(device)
         return DeviceState(
-            power=None if switch is None else switch == "on",
+            online=online,
+            # Fora da rede, o "ligado" guardado pela SmartThings é velho: trata como desligado.
+            power=False if not online else None if switch is None else switch == "on",
             attributes={k: v for k, v in attributes.items() if v is not None},
         )
 
