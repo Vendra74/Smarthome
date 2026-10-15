@@ -9,6 +9,7 @@ como offline.
 from __future__ import annotations
 
 import asyncio
+import errno
 import ipaddress
 import logging
 import re
@@ -24,6 +25,26 @@ BROADCAST_ADDR = ("255.255.255.255", 1900)
 SSDP_TARGET = "urn:samsung.com:device:RemoteControlReceiver:1"
 INFO_PORT = 8001
 
+# No macOS, sem a permissão "Rede local" para o app do terminal, todo pacote para a rede
+# dá "No route to host" (errno 65): nem multicast, nem broadcast, nem a varredura por IP.
+MACOS_HINT = (
+    "O macOS parece estar bloqueando o acesso da central à rede local: em Ajustes do Sistema > "
+    "Privacidade e Segurança > Rede local, ligue o app do terminal (Terminal, iTerm ou VS Code) "
+    "e reinicie a central."
+)
+_blocked = False
+
+
+def lan_blocked() -> bool:
+    """True quando a última tentativa de falar com a rede local foi barrada pelo sistema."""
+    return _blocked
+
+
+def _note_oserror(exc: BaseException) -> None:
+    global _blocked
+    if getattr(exc, "errno", None) == errno.EHOSTUNREACH or "No route to host" in str(exc):
+        _blocked = True
+
 
 async def tv_info(host: str, timeout: float = 2.0) -> dict[str, Any] | None:
     """Nome, modelo, MAC e estado de energia da TV em `host`; None se ela não responde."""
@@ -32,8 +53,11 @@ async def tv_info(host: str, timeout: float = 2.0) -> dict[str, Any] | None:
             response = await client.get(f"http://{host}:{INFO_PORT}/api/v2/")
             response.raise_for_status()
             data = response.json()
-    except (httpx.HTTPError, ValueError):
+    except (httpx.HTTPError, ValueError) as exc:
+        _note_oserror(exc)
         return None
+    global _blocked
+    _blocked = False  # a rede respondeu: não há bloqueio
     device = data.get("device", {})
     return {
         "host": device.get("ip") or host,
@@ -70,6 +94,7 @@ def _ssdp_hosts(timeout: float) -> set[str]:
                 # No macOS, sem permissão de "Rede local" para o Terminal (ou com VPN),
                 # multicast dá "No route to host". A varredura por IP cobre esse caso.
                 log.info("SSDP para %s falhou: %s", addr[0], exc)
+                _note_oserror(exc)
         if not sent:
             return hosts
         try:
@@ -118,7 +143,10 @@ async def find_samsung_tvs(timeout: float = 3.0) -> list[dict[str, Any]]:
     if network is None:
         return []
     log.info("SSDP não achou TV; varrendo %s", network)
-    return await sweep_samsung_tvs(network)
+    found = await sweep_samsung_tvs(network)
+    if not found and _blocked:
+        log.warning(MACOS_HINT)
+    return found
 
 
 def same_tv(a: str, b: str) -> bool:

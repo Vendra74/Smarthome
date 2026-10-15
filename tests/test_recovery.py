@@ -173,3 +173,26 @@ def test_sweep_finds_tv_without_multicast(monkeypatch):
     monkeypatch.setattr(samsung_lan, "local_network", lambda: ipaddress.ip_network("10.0.0.0/24"))
     found = asyncio.run(samsung_lan.find_samsung_tvs())
     assert [t["host"] for t in found] == ["10.0.0.20"]
+
+
+def test_macos_block_is_named_in_the_message(monkeypatch, tmp_path):
+    """Errno 65 em tudo (multicast, broadcast, varredura) é o bloqueio de 'Rede local' do macOS."""
+    import socket
+
+    from smarthome.adapters import samsung_lan
+
+    def boom(self, *_args, **_kwargs):
+        raise OSError(65, "No route to host")
+
+    monkeypatch.setattr(socket.socket, "sendto", boom)
+    samsung_lan._blocked = False
+    samsung_lan._ssdp_hosts(0.1)
+    assert samsung_lan.lan_blocked()
+
+    hub, _ = make_hub(tmp_path, FlakyCloud(fails=99), lan=[])
+    result = asyncio.run(hub.execute("tv-sala", Command.TURN_ON))
+    assert not result.ok and "Rede local" in result.message
+
+    samsung_lan._blocked = False
+    result = asyncio.run(hub.execute("tv-sala", Command.TURN_ON))
+    assert "Rede local" not in result.message and "mesma rede" in result.message

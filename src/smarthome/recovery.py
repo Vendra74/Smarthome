@@ -19,6 +19,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from .adapters.base import Adapter, AdapterError, DeviceUnreachable
+from .adapters import samsung_lan
 from .adapters.samsung_lan import find_samsung_tvs, same_tv, tv_info
 from .adapters.wol import send_magic_packet
 from .models import Command, Device, DeviceState, DeviceType
@@ -29,6 +30,11 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 HINT = "Confira na TV 'Ligar com dispositivo móvel' e se ela está na mesma rede da central."
+
+
+def hint() -> str:
+    """Dica para a pessoa; aponta o bloqueio do macOS quando foi ele que impediu a busca."""
+    return samsung_lan.MACOS_HINT if samsung_lan.lan_blocked() else HINT
 
 
 class TVRecovery:
@@ -79,7 +85,7 @@ class TVRecovery:
         if not mac:
             raise DeviceUnreachable(
                 f"{device.name} está fora do alcance e não achei o MAC dela na rede para acordá-la. "
-                "Ligue a TV uma vez pelo controle, que a central guarda o IP e o MAC. " + HINT
+                "Ligue a TV uma vez pelo controle, que a central guarda o IP e o MAC. " + hint()
             )
         for _ in range(3):
             self._wake(mac)
@@ -93,7 +99,7 @@ class TVRecovery:
                 continue
             return state, f"{device.name} estava fora do alcance; acordei pela rede."
         raise DeviceUnreachable(
-            f"Mandei acordar {device.name} pela rede, mas ela não respondeu em {int(self.timeout)} s. " + HINT
+            f"Mandei acordar {device.name} pela rede, mas ela não respondeu em {int(self.timeout)} s. " + hint()
         )
 
     async def _local(

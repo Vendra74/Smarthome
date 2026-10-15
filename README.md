@@ -83,6 +83,11 @@ dispositivo móvel* e ligue a TV pelo controle uma vez com a central rodando,
 para ela aprender o IP e o MAC. Na primeira vez que a central falar direto com
 a TV, a TV pede autorização na tela; aceite.
 
+No macOS, o sistema só deixa o terminal falar com a rede local depois de
+liberado em *Ajustes do Sistema > Privacidade e Segurança > Rede local*
+(ligue o Terminal, iTerm ou VS Code, de onde a central roda). Sem isso toda
+busca dá "No route to host"; a central percebe e avisa no app e no log.
+
 ## Contas: entrar com a conta, sem chave nem token
 
 Quem usa a central não cria conta de desenvolvedor nem copia token. O botão
