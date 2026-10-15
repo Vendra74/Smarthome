@@ -220,6 +220,7 @@ async function send(device, command, params = {}) {
       body: { command, params },
     });
     if (!result.ok) showReply(result.message || `Não consegui falar com ${device.name}.`);
+    else if (result.message) showReply(result.message);
     if (result.state) device.state = result.state;
   } catch (error) {
     showReply(error.message);

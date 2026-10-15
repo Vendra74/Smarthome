@@ -3,12 +3,13 @@
 Na primeira conexão a TV mostra um pedido de autorização; o token aceito fica
 salvo em config.token_file. Ligar usa Wake-on-LAN (config.mac).
 Instale com: pip install -e ".[samsung]"
-Ainda não testado com hardware real.
+Também é o caminho de recuperação quando a SmartThings perde a TV (ver recovery.py).
 """
 
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from ..models import Command, Device, DeviceState
@@ -33,10 +34,12 @@ class SamsungTVAdapter(Adapter):
             from samsungtvws import SamsungTVWS
         except ImportError as exc:
             raise AdapterError("Instale o extra samsung: pip install -e '.[samsung]'") from exc
+        token_file = Path(device.config.get("token_file", f"tokens/{device.id}.token"))
+        token_file.parent.mkdir(parents=True, exist_ok=True)
         return SamsungTVWS(
             host=device.config["host"],
             port=device.config.get("port", 8002),
-            token_file=device.config.get("token_file", f"tokens/{device.id}.token"),
+            token_file=str(token_file),
             name="Central Casa",
         )
 

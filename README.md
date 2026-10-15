@@ -71,6 +71,18 @@ curl -X POST localhost:8000/agent \
 curl localhost:8000/discover
 ```
 
+## TV Samsung que "some" da SmartThings
+
+Em standby a TV Samsung costuma sumir da nuvem (a SmartThings responde `409`
+e a mostra offline). A central está na mesma rede que a TV e resolve sozinha:
+acha a TV na rede local (guarda IP e MAC no `devices.yaml`), acorda por
+Wake-on-LAN e repete o comando quando a TV volta; se a TV está ligada mas a
+nuvem não a vê, manda o comando direto pela rede. Para isso funcionar, ative
+na TV *Configurações > Geral > Gerenciador de dispositivos externos > Ligar com
+dispositivo móvel* e ligue a TV pelo controle uma vez com a central rodando,
+para ela aprender o IP e o MAC. Na primeira vez que a central falar direto com
+a TV, a TV pede autorização na tela; aceite.
+
 ## Uma pasta por casa
 
 A casa do Andre é o caso de referência, mas nada dela fica no código. Cada casa

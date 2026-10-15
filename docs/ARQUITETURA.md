@@ -79,6 +79,12 @@ Para virar produto, o caminho previsto é:
   não fazem parte dessa API e seguem pela rede local.
 - **TV Samsung (rede local).** `samsungtvws`: desligar, mudo, canal, abrir app.
   Ligar é por Wake-on-LAN (precisa do MAC). Volume absoluto só via SmartThings.
+- **Recuperação pela rede local (`recovery.py`).** Quando a nuvem diz que não
+  alcança o aparelho (`DeviceUnreachable`), o Hub tenta pela rede antes de
+  desistir: acha a TV por SSDP + `http://<ip>:8001/api/v2/` (`samsung_lan.py`),
+  guarda IP e MAC, acorda por Wake-on-LAN e repete o comando pela nuvem; se a
+  TV está ligada na rede mas invisível na nuvem, usa o adaptador local. É o
+  motivo de a central existir dentro da casa: a nuvem sozinha não acorda a TV.
 - **TV LG webOS (rede local).** `aiowebostv`: desligar, volume, mudo, abrir app.
   Ligar por Wake-on-LAN. Pareamento uma vez na TV gera a `client_key`.
 - **Outros (próximas fases).** Tuya/Smart Life, Philips Hue, ar-condicionado

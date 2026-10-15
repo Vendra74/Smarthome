@@ -12,6 +12,12 @@ class AdapterError(Exception):
     """Falha ao falar com o dispositivo ou a plataforma."""
 
 
+class DeviceUnreachable(AdapterError):
+    """A plataforma respondeu, mas não alcança o aparelho agora (desligado, standby, fora da rede).
+
+    O Hub usa isso para tentar recuperar o aparelho pela rede local."""
+
+
 class Adapter(ABC):
     name: str
 

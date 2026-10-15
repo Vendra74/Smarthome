@@ -10,8 +10,9 @@ import re
 import unicodedata
 from typing import TYPE_CHECKING, Any
 
-from .adapters.base import Adapter, AdapterError
+from .adapters.base import Adapter, AdapterError, DeviceUnreachable
 from .models import Command, CommandResult, Device, DeviceState, DeviceType, DiscoveredDevice
+from .recovery import TVRecovery
 from .registry import DeviceRegistry
 
 if TYPE_CHECKING:
@@ -30,9 +31,14 @@ class Hub:
     """A central de uma casa. Cada casa tem seu Hub, cadastro e credenciais."""
 
     def __init__(
-        self, registry: DeviceRegistry, adapters: list[Adapter], home: HomeConfig | None = None
+        self,
+        registry: DeviceRegistry,
+        adapters: list[Adapter],
+        home: HomeConfig | None = None,
+        recovery: TVRecovery | None = None,
     ) -> None:
         self.home = home
+        self.recovery = recovery or TVRecovery()
         self.registry = registry
         self.integrations: list[dict[str, str]] = []
         # Último erro de descoberta por adaptador, para o app mostrar o motivo.
@@ -55,22 +61,34 @@ class Hub:
                 ok=False,
                 message=f"{device.name} não aceita o comando {command.value}",
             )
+        adapter = self._adapter(device)
+        note = ""
         try:
-            state = await self._adapter(device).execute(device, command, params or {})
+            try:
+                state = await adapter.execute(device, command, params or {})
+            except DeviceUnreachable as exc:
+                if not self.recovery.applies(device):
+                    raise
+                # A nuvem não alcança a TV; a central está na mesma rede e tenta por ela.
+                log.info("%s fora do alcance da nuvem (%s); recuperando pela rede local", device_id, exc)
+                state, note = await self.recovery.recover(self, device, command, params or {}, adapter)
         except (AdapterError, KeyError, ValueError) as exc:
             log.warning("Falha em %s %s: %s", device_id, command.value, exc)
             return CommandResult(device_id=device_id, ok=False, message=str(exc))
-        log.info("%s <- %s %s", device_id, command.value, params or {})
-        return CommandResult(device_id=device_id, ok=True, state=state)
+        log.info("%s <- %s %s %s", device_id, command.value, params or {}, note)
+        return CommandResult(device_id=device_id, ok=True, state=state, message=note)
 
     async def get_state(self, device_id: str) -> DeviceState | None:
         device = self.registry.get(device_id)
         if device is None:
             return None
         try:
-            return await self._adapter(device).get_state(device)
+            state = await self._adapter(device).get_state(device)
         except AdapterError:
-            return DeviceState(online=False)
+            state = DeviceState(online=False)
+        if self.recovery.applies(device):
+            state = await self.recovery.state(device, state)
+        return state
 
     async def discover(self, adapter_name: str | None = None) -> list[DiscoveredDevice]:
         """Dispositivos que as plataformas conhecem e a central ainda não cadastrou."""

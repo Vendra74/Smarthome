@@ -57,6 +57,15 @@ class DeviceRegistry:
             self._save()
         return device
 
+    def update(self, device: Device) -> Device:
+        """Regrava um dispositivo já cadastrado (ex.: IP e MAC descobertos na rede)."""
+        with self._lock:
+            if device.id not in self._devices:
+                raise ValueError(f"Dispositivo '{device.id}' não está cadastrado")
+            self._devices[device.id] = device
+            self._save()
+        return device
+
     def remove(self, device_id: str) -> None:
         with self._lock:
             self._devices.pop(device_id, None)

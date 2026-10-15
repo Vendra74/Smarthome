@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 
 from ..models import Command, Device, DeviceState, DeviceType, DiscoveredDevice
-from .base import Adapter, AdapterError
+from .base import Adapter, AdapterError, DeviceUnreachable
 
 API_URL = "https://api.smartthings.com/v1"
 log = logging.getLogger(__name__)
@@ -124,7 +124,7 @@ class SmartThingsAdapter(Adapter):
             if "409" in str(exc) and (device.type == DeviceType.TV or not await self._is_online(device)):
                 reason = str(exc).partition("(")[2].rstrip(")")
                 hint = f" (SmartThings: {reason})" if reason else ""
-                raise AdapterError(
+                raise DeviceUnreachable(
                     f"{device.name} não respondeu à SmartThings: está desligada, em standby ou fora da rede{hint}. "
                     "Para ligar pela rede, ative na TV 'Ligar com dispositivo móvel'."
                 ) from exc
