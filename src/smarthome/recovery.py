@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -42,6 +43,7 @@ class TVRecovery:
     ) -> None:
         self._scan, self._info, self._wake, self._sleep = scan, info, wake, sleep
         self.timeout, self.interval = timeout, interval
+        self._last_scan: dict[str, float] = {}
 
     def applies(self, device: Device) -> bool:
         return device.type == DeviceType.TV and device.adapter == "smartthings"
@@ -53,7 +55,9 @@ class TVRecovery:
             found = await self._info(host)
             if found:
                 return found
-        for tv in await self._scan():
+        tvs = await self._scan()
+        log.info("TVs Samsung na rede local: %s", [(t["name"], t["host"], t["mac"]) for t in tvs] or "nenhuma")
+        for tv in tvs:
             if same_tv(tv["name"], device.name) or (host and tv["host"] == host):
                 if tv["host"] != host or (tv["mac"] and tv["mac"] != device.config.get("mac")):
                     device.config.update({"host": tv["host"], **({"mac": tv["mac"]} if tv["mac"] else {})})
@@ -110,12 +114,19 @@ class TVRecovery:
             "Tente de novo em instantes."
         )
 
-    async def state(self, device: Device, state: DeviceState) -> DeviceState:
-        """Corrige 'sem conexão' da nuvem quando a TV responde ligada na rede local."""
-        host = device.config.get("host")
-        if state.online or not host:
+    async def state(self, hub: Hub, device: Device, state: DeviceState) -> DeviceState:
+        """Corrige 'sem conexão' da nuvem quando a TV responde ligada na rede local.
+
+        Sem IP conhecido, varre a rede no máximo uma vez por minuto por TV."""
+        if state.online:
             return state
-        found = await self._info(host)
+        if device.config.get("host"):
+            found = await self._info(device.config["host"])
+        elif time.monotonic() - self._last_scan.get(device.id, -1e9) > 60:
+            self._last_scan[device.id] = time.monotonic()
+            found = await self.locate(hub, device)
+        else:
+            found = None
         if found and found["power"]:
-            return DeviceState(online=True, power=True, attributes=state.attributes)
+            return DeviceState(online=True, power=True, attributes={**state.attributes, "via": "rede local"})
         return state

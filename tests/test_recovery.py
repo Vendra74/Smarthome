@@ -135,3 +135,11 @@ def test_same_tv_name_matching():
     assert same_tv("TV Samsung 6 Series (55)", "[TV] Samsung 6 Series (55)")
     assert not same_tv("[TV] Samsung 6 Series (55)", "[TV] Samsung 7 Series (65)")
     assert not same_tv("", "")
+
+
+def test_state_scans_lan_when_tv_has_no_host_yet(tmp_path):
+    lan = [{"host": "192.168.0.50", "name": TV_NAME, "model": "", "mac": "AA:BB:CC:DD:EE:FF", "power": True}]
+    hub, _ = make_hub(tmp_path, FlakyCloud(fails=99), lan=lan)
+    state = asyncio.run(hub.get_state("tv-sala"))
+    assert state.online is True and state.power is True and state.attributes["via"] == "rede local"
+    assert hub.registry.get("tv-sala").config["host"] == "192.168.0.50"

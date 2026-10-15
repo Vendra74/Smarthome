@@ -87,7 +87,7 @@ class Hub:
         except AdapterError:
             state = DeviceState(online=False)
         if self.recovery.applies(device):
-            state = await self.recovery.state(device, state)
+            state = await self.recovery.state(self, device, state)
         return state
 
     async def discover(self, adapter_name: str | None = None) -> list[DiscoveredDevice]:

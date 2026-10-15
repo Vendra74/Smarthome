@@ -112,6 +112,7 @@ function statusText(device) {
     if (a.volume != null) parts.push(`volume ${a.volume}`);
   }
   if (a.temperature != null) parts.push(`ambiente ${a.temperature}°C`);
+  if (a.via) parts.push(`via ${a.via}`);
   return parts.join(" · ");
 }
 
