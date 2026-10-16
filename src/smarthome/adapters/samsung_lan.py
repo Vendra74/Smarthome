@@ -15,7 +15,9 @@ import ipaddress
 import logging
 import os
 import re
+import shutil
 import socket
+import subprocess
 from typing import Any
 
 import httpx
@@ -176,19 +178,29 @@ def _private(ip: str) -> ipaddress.IPv4Address | None:
     return addr if addr.version == 4 and addr.is_private else None
 
 
+def _run_traceroute() -> str:
+    """Roda o traceroute do sistema sem fork(): no macOS, um fork() dentro de um processo com
+    threads derruba o filho (fork safety do Objective-C) e abre o relatório de erro da Apple.
+    Com caminho completo e close_fds=False o Python usa posix_spawn, que não tem esse problema."""
+    for name, args in (("traceroute", ["-n", "-m", "3", "-q", "1", "-w", "1", "8.8.8.8"]),
+                       ("tracepath", ["-n", "-m", "3", "8.8.8.8"])):
+        path = shutil.which(name)
+        if not path:
+            continue
+        try:
+            done = subprocess.run([path, *args], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                  close_fds=False, timeout=8, check=False)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        return done.stdout.decode(errors="ignore")
+    return ""
+
+
 async def _traceroute_hops() -> list[str]:
     """IPs dos primeiros saltos até a internet: o segundo costuma ser o modem (a outra rede)."""
-    for cmd in (["traceroute", "-n", "-m", "3", "-q", "1", "-w", "1", "8.8.8.8"],
-                ["tracepath", "-n", "-m", "3", "8.8.8.8"]):
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
-            out, _ = await asyncio.wait_for(proc.communicate(), timeout=8)
-        except (OSError, asyncio.TimeoutError):
-            continue
-        hops = re.findall(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b", out.decode(errors="ignore"))
-        return [h for h in hops if h != "8.8.8.8"]
-    return []
+    out = await asyncio.to_thread(_run_traceroute)
+    hops = re.findall(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b", out)
+    return [h for h in hops if h != "8.8.8.8"]
 
 
 async def _gateway_answers(ip: str, timeout: float = 0.7) -> bool:
