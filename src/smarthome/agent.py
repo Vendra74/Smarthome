@@ -115,6 +115,17 @@ TOOLS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "remove_device",
+        "description": "Remove um dispositivo do cadastro da central (ex.: um exemplo virtual ou um aparelho que saiu de casa). Confirme com o usuário antes se houver dúvida sobre qual é.",
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {"device_id": {"type": "string"}},
+            "required": ["device_id"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -182,6 +193,12 @@ class HomeAgent:
                 config=config,
             )
             return {"registered": device.model_dump(mode="json")}
+        if name == "remove_device":
+            device = self.hub.registry.get(args["device_id"])
+            if device is None:
+                raise ValueError(f"Dispositivo {args['device_id']} não está cadastrado")
+            self.hub.registry.remove(device.id)
+            return {"removed": device.id, "name": device.name}
         raise ValueError(f"Ferramenta desconhecida: {name}")
 
     async def handle(self, text: str, session_id: str = "default") -> str:

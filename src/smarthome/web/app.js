@@ -218,6 +218,13 @@ function renderCard(device) {
       : "A central ainda não aprendeu o IP e o MAC desta TV: ligue-a uma vez pelo controle com a central rodando.";
     inner.append(hint);
   }
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "remove";
+  remove.textContent = "Remover";
+  remove.title = "Tirar este aparelho do cadastro da central";
+  remove.addEventListener("click", () => removeDevice(device));
+  inner.append(remove);
   if (inner.childElementCount) {
     inner.addEventListener("click", (e) => e.stopPropagation());
     const clip = document.createElement("div");
@@ -296,6 +303,18 @@ function chips(options, selected, onPick) {
 }
 
 // ---------- Comandos ----------
+
+async function removeDevice(device) {
+  const what = device.adapter === "virtual" ? `${device.name} (exemplo virtual)` : device.name;
+  if (!confirm(`Remover ${what} do cadastro da central?`)) return;
+  try {
+    await api(`/devices/${encodeURIComponent(device.id)}`, { method: "DELETE" });
+    state.open = null;
+    await load();
+  } catch (err) {
+    alert(err.message);
+  }
+}
 
 async function send(device, command, params = {}) {
   const card = document.querySelector(`.row[data-id="${CSS.escape(device.id)}"]`);

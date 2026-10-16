@@ -70,6 +70,18 @@ def test_registers_new_device_by_conversation(hub):
     assert device.config == {"host": "192.168.0.9"}
 
 
+def test_removes_device_by_conversation(hub):
+    client = FakeClient(
+        [
+            SimpleNamespace(stop_reason="tool_use", content=[tool_use("t1", "remove_device", {"device_id": "luz-sala"})]),
+            SimpleNamespace(stop_reason="end_turn", content=[text("Tirei a luz da sala do cadastro.")]),
+        ]
+    )
+    reply = asyncio.run(HomeAgent(hub, client=client).handle("remove a luz da sala, era só exemplo"))
+    assert reply == "Tirei a luz da sala do cadastro."
+    assert hub.registry.get("luz-sala") is None
+
+
 def test_tool_error_goes_back_to_model(hub):
     client = FakeClient(
         [

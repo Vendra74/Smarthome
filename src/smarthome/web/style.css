@@ -159,6 +159,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .labeled { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .labeled > span { font-size: .78rem; color: var(--muted); margin-right: 2px; }
+.more .remove { margin-left: auto; padding: 4px 10px; font-size: .78rem; font-weight: 500; background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.more .remove:hover { color: var(--danger); border-color: var(--danger); }
 .chips button {
   padding: 5px 11px;
   font-size: .82rem;
