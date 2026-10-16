@@ -145,6 +145,13 @@ class TVRecovery:
         except (OSError, ValueError) as exc:
             log.info("Wake-on-LAN preventivo em %s falhou: %s", device.id, exc)
 
+    def stop(self) -> None:
+        """Cancela buscas e aprendizados em andamento (no encerramento da central)."""
+        for name in ("_scan_task", "_learn_task"):
+            task = getattr(self, name, None)
+            if task is not None and not task.done():
+                task.cancel()
+
     def _background_learn(self, hub: Hub, min_gap: float = 60.0) -> None:
         """Roda `learn` em segundo plano, no máximo uma vez a cada `min_gap` s."""
         if time.monotonic() - self._last_learn < min_gap:

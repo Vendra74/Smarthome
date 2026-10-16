@@ -45,6 +45,7 @@ class SamsungTVAdapter(Adapter):
             port=device.config.get("port", 8002),
             token_file=str(token_file),
             name="Central Casa",
+            timeout=5,  # sem isso, TV desligada segura cada comando (e o encerramento) por 75 s
         )
 
     def _run(self, device: Device, command: Command, params: dict[str, Any]) -> None:

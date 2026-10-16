@@ -128,8 +128,11 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
         learner = app.state.hub.recovery.start_background(app.state.hub)
         clock = app.state.hub.routine_runner.start_background(app.state.hub)
         yield
+        # Encerramento: cancela tudo que roda em segundo plano para não segurar o reinício.
         learner.cancel()
         clock.cancel()
+        app.state.hub.recovery.stop()
+        await asyncio.gather(learner, clock, return_exceptions=True)
 
     app = FastAPI(title="Central da Casa", version="0.1.0", lifespan=lifespan)
     app.state.oauth = None
