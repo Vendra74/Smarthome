@@ -30,13 +30,19 @@ def test_inactive_adapter_offline_device_and_broken_scene(hub, monkeypatch):
     hub.create_routine("R", TimeTrigger(at="10:00"), "velha")
     hub.scenes.remove("velha")
     for _ in range(3):
-        hub._note_error("luz-sala", "turn_on", "SmartThings recusou (409 Conflict)")
+        hub._note_error("tv-sala", "turn_on", "SmartThings recusou (409 Conflict)")
     report = run(diagnose(hub, fresh=True))
     found = codes(report)
     assert found[0] == "lan_blocked"  # crítico primeiro
     assert "adapter_inactive" in found and "routine_missing_scene" in found and "repeated_failures" in found
     failures = next(f for f in report.findings if f.code == "repeated_failures")
-    assert "3 vezes" in failures.title and "espere" in failures.action
+    assert "vezes" in failures.title and "Último motivo" in failures.detail
+    # último motivo 409/429: a dica é esperar a nuvem
+    hub.recent_errors.clear()
+    for _ in range(3):
+        hub._note_error("tv-sala", "turn_on", "SmartThings recusou (409 Conflict)")
+    report = run(diagnose(hub))  # sem fresh: não consulta de novo, então o 409 continua sendo o último
+    assert "espere" in next(f for f in report.findings if f.code == "repeated_failures").action
     assert "ponto(s) de atenção" in report.summary
 
 
