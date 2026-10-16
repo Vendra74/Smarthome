@@ -326,7 +326,8 @@ class HomeAgent:
             return {"registered": device.model_dump(mode="json")}
         if name == "diagnose":
             report = await diagnose(self.hub)
-            findings = [f for f in report.findings if not args.get("device_id") or f.device_id in (args["device_id"], None)]
+            wanted = args.get("device_id")
+            findings = [f for f in report.findings if not wanted or f.concerns(wanted) or (f.device_id is None and not f.device_ids)]
             return {"summary": report.summary, "findings": [f.model_dump() for f in findings]}
         if name == "list_scenes":
             return [s.model_dump(mode="json") for s in self.hub.scenes.all()]

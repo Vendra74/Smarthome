@@ -35,6 +35,10 @@ class Finding(BaseModel):
     detail: str = ""
     action: str = ""
     device_id: str | None = None
+    device_ids: list[str] = Field(default_factory=list)  # quando o achado junta vários aparelhos
+
+    def concerns(self, device_id: str) -> bool:
+        return device_id == self.device_id or device_id in self.device_ids
 
 
 class HealthReport(BaseModel):
@@ -52,6 +56,19 @@ PROVIDER_LABEL = {"smartthings": "SmartThings (Samsung)", "lg_thinq": "LG ThinQ"
 
 def _label(adapter: str) -> str:
     return PROVIDER_LABEL.get(adapter, adapter)
+
+
+def _group(findings: list[Finding], code: str, title, detail: str, action: str) -> list[Finding]:
+    """Junta achados iguais de vários aparelhos num só, listando os nomes."""
+    same = [f for f in findings if f.code == code]
+    if len(same) < 2:
+        return findings
+    names = [f.title.split(" está ")[0].split(" não responde")[0] for f in same]
+    merged = Finding(level=same[0].level, code=code, title=title(len(same)),
+                     detail=f"{', '.join(names)}. {detail}", action=action,
+                     device_ids=[f.device_id for f in same if f.device_id])
+    rest = [f for f in findings if f.code != code]
+    return rest + [merged]
 
 
 async def diagnose(hub: Hub, fresh: bool = False) -> HealthReport:
@@ -113,6 +130,20 @@ async def diagnose(hub: Hub, fresh: bool = False) -> HealthReport:
                 pass
         if state.online:
             continue
+        if d.adapter in ("samsung_tv", "lg_tv"):
+            # TV controlada pela rede local: offline quer dizer desligada/em espera
+            if d.config.get("mac"):
+                findings.append(Finding(
+                    level="info", code="tv_standby", device_id=d.id, title=f"{d.name} está em espera",
+                    detail="Está desligada ou em espera; a central acorda pela rede ao ligar.",
+                ))
+            else:
+                findings.append(Finding(
+                    level="warning", code="tv_unknown_lan", device_id=d.id,
+                    title=f"{d.name} não responde na rede e a central não tem o MAC dela",
+                    action="Cadastre o MAC da TV (em Adicionar, campo MAC) para a central poder acordá-la.",
+                ))
+            continue
         if d.type == DeviceType.TV and hub.recovery.applies(d):
             if d.config.get("mac"):
                 findings.append(Finding(
@@ -133,6 +164,15 @@ async def diagnose(hub: Hub, fresh: bool = False) -> HealthReport:
                 action="Confira se está na tomada e no Wi-Fi; se o Wi-Fi mudou, refaça o pareamento no app do fabricante.",
             ))
 
+    # Várias TVs na mesma situação viram um achado só
+    findings = _group(findings, "tv_unknown_lan",
+                      lambda n: f"{n} TVs estão fora da nuvem e a central ainda não as viu na rede",
+                      "Provavelmente estão desligadas. Sem IP e MAC, não dá para acordá-las quando a SmartThings as perde.",
+                      "Ligue cada uma pelo controle uma vez com a central rodando; ela aprende sozinha. " + hub.recovery_hint())
+    findings = _group(findings, "offline", lambda n: f"{n} aparelhos estão sem conexão",
+                      "O fabricante informa os aparelhos offline.",
+                      "Confira tomada e Wi-Fi de cada um; se o Wi-Fi mudou, refaça o pareamento no app do fabricante.")
+
     # 5. Falhas repetidas na última hora
     recent = [e for e in hub.recent_errors if now - e["time"] < ERROR_WINDOW]
     per_device: dict[str, list[dict[str, Any]]] = {}
@@ -144,6 +184,11 @@ async def diagnose(hub: Hub, fresh: bool = False) -> HealthReport:
         device = hub.registry.get(device_id)
         name = device.name if device else device_id
         last = errors[-1]["message"]
+        existing = next((f for f in findings if f.concerns(device_id) and f.code in ("offline", "tv_unknown_lan", "tv_standby")), None)
+        if existing is not None:
+            # já está explicado como offline/em espera; só acrescenta o motivo que a nuvem deu
+            existing.detail = (existing.detail + " " if existing.detail else "") + f"{name} falhou {len(errors)} vezes na última hora: {last}"
+            continue
         if "409" in last or "rate" in last.lower() or "429" in last:
             action = "A nuvem está limitando ou sem contato com o aparelho; espere alguns minutos. Para TVs, a central tenta pela rede local."
         else:

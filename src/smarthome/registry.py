@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import threading
 import unicodedata
 from pathlib import Path
@@ -24,6 +25,8 @@ class DeviceRegistry:
         if path and path.exists():
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
             for raw in data.get("devices", []):
+                if isinstance(raw.get("name"), str):
+                    raw["name"] = html.unescape(raw["name"])  # cadastros antigos com &quot;
                 device = Device.model_validate(raw)
                 self._devices[device.id] = device
 

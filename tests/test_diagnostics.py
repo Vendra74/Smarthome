@@ -74,3 +74,65 @@ def test_uses_cached_states_unless_fresh(hub, monkeypatch):
     hub.last_states["luz-sala"] = (time.monotonic(), DeviceState(online=False))
     assert "offline" in codes(run(diagnose(hub)))  # usa o cache (offline)
     assert "offline" not in codes(run(diagnose(hub, fresh=True)))  # consulta de novo (virtual está online)
+
+
+def test_groups_similar_tvs_and_merges_repeated_failures(hub, monkeypatch):
+    monkeypatch.setattr(samsung_lan, "lan_blocked", lambda: False)
+    monkeypatch.setattr(samsung_lan, "local_network", lambda: None)
+
+    class Offline:
+        name = "smartthings"
+
+        async def execute(self, device, command, params):
+            return DeviceState(online=False)
+
+        async def get_state(self, device):
+            return DeviceState(online=False)
+
+        async def discover(self):
+            return []
+
+    hub.set_adapter(Offline())
+    for n in ("55", "50", "43"):
+        hub.registry.add(Device(id=f"tv-{n}", name=f"Samsung ({n})", type=DeviceType.TV, adapter="smartthings"))
+    hub.registry.add(Device(id="ar-sala", name="Ar sala", type=DeviceType.AC, adapter="smartthings"))
+    for _ in range(6):
+        hub._note_error("ar-sala", "turn_off", "NOT_CONNECTED_DEVICE (1222)")
+    hub.recovery._scan = lambda: asyncio.sleep(0, result=[])
+    report = run(diagnose(hub, fresh=True))
+    grouped = next(f for f in report.findings if f.code == "tv_unknown_lan")
+    assert grouped.title.startswith("3 TVs") and set(grouped.device_ids) == {"tv-55", "tv-50", "tv-43"}
+    assert grouped.concerns("tv-50")
+    offline = next(f for f in report.findings if f.code == "offline")
+    assert offline.device_id == "ar-sala" and "6 vezes" in offline.detail and "1222" in offline.detail
+    assert "repeated_failures" not in codes(report)
+
+
+def test_lan_tv_offline_is_standby(hub, monkeypatch):
+    monkeypatch.setattr(samsung_lan, "lan_blocked", lambda: False)
+    monkeypatch.setattr(samsung_lan, "local_network", lambda: None)
+
+    class Lan:
+        name = "samsung_tv"
+
+        async def execute(self, device, command, params):
+            return DeviceState(online=False)
+
+        async def get_state(self, device):
+            return DeviceState(online=False)
+
+        async def discover(self):
+            return []
+
+    hub.set_adapter(Lan())
+    hub.registry.add(Device(id="tv85", name='85" Crystal', type=DeviceType.TV, adapter="samsung_tv", config={"host": "10.0.0.19", "mac": "4C"}))
+    report = run(diagnose(hub, fresh=True))
+    assert codes(report) == ["tv_standby"] and report.summary.startswith("Tudo em ordem")
+
+
+def test_registry_unescapes_old_names(tmp_path):
+    from smarthome.registry import DeviceRegistry
+
+    path = tmp_path / "devices.yaml"
+    path.write_text('devices:\n  - id: tv\n    name: "85&quot; Crystal UHD"\n    type: tv\n    adapter: samsung_tv\n', encoding="utf-8")
+    assert DeviceRegistry(path).get("tv").name == '85" Crystal UHD'
