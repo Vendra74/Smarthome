@@ -381,3 +381,15 @@ def test_tv_without_power_state_does_not_show_on_when_cloud_says_offline(tmp_pat
                       config={"host": "10.0.0.18", "mac": "AA:BB:CC:DD:EE:01"})
     state = asyncio.run(hub.get_state("tv-sala"))
     assert state.online is False
+
+
+def test_stale_ip_is_replaced_from_the_last_scan(tmp_path):
+    """Roteador trocado: a TV guardada em 10.0.0.10 agora está em 192.168.0.40."""
+    lan = [{"host": "192.168.0.40", "name": TV_NAME, "model": "", "mac": "AA:BB:CC:DD:EE:01", "power": True}]
+    hub, _ = make_hub(tmp_path, FlakyCloud(fails=99), lan=lan,
+                      info=lambda host: lan[0] if host == "192.168.0.40" else None,
+                      config={"host": "10.0.0.10", "mac": "AA:BB:CC:DD:EE:01"})
+    asyncio.run(hub.recovery.learn(hub))  # varredura já feita
+    state = asyncio.run(hub.get_state("tv-sala"))
+    assert state.online and state.power
+    assert hub.registry.get("tv-sala").config["host"] == "192.168.0.40"

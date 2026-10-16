@@ -287,19 +287,20 @@ class TVRecovery:
                     return DeviceState(online=True, power=False,
                                        attributes={**state.attributes, "via": "rede local"})
             return state
+        found = None
         if device.config.get("host"):
             found = await self._info(device.config["host"])
-        elif self._scan_cache is not None:
-            # Lista pronta da última varredura; a próxima roda em segundo plano, para a
+        if found is None and self._scan_cache is not None:
+            # Lista pronta da última varredura (serve também quando o IP guardado mudou:
+            # roteador trocado, DHCP). A próxima varredura roda em segundo plano, para a
             # tela não esperar a rede inteira ser varrida.
             found = next((tv for tv in self._scan_cache[1] if self._matches(tv, device)), None)
             if found:
                 self._remember(hub, device, found)
             if time.monotonic() - self._scan_cache[0] > 60:
                 self._background_scan()
-        else:
+        elif found is None:
             self._background_scan()
-            found = None
         if found and _surely_on(found):
             return DeviceState(online=True, power=True, attributes={**state.attributes, "via": "rede local"})
         return state
