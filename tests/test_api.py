@@ -181,3 +181,12 @@ def test_routines_api(hub):
         assert client.patch("/routines/nada", json={"enabled": False}).status_code == 404
         assert client.delete("/routines/tv").status_code == 204
         assert [x["id"] for x in client.get("/routines").json()] == ["dormir"]
+
+
+def test_health_endpoint(hub, monkeypatch):
+    from smarthome.adapters import samsung_lan
+
+    monkeypatch.setattr(samsung_lan, "lan_blocked", lambda: False)
+    with TestClient(create_app(hub=hub)) as client:
+        report = client.get("/health", params={"fresh": "true"}).json()
+        assert report["findings"] == [] and "checked_at" in report

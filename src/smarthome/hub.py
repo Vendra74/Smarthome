@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import deque
 import re
 import time
 import unicodedata
@@ -15,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from .adapters.base import Adapter, AdapterError, DeviceUnreachable
 from .adapters.samsung_lan import same_tv
 from .models import Command, CommandResult, Device, DeviceState, DeviceType, DiscoveredDevice
-from .recovery import TVRecovery
+from .recovery import TVRecovery, hint as recovery_hint
 from .registry import DeviceRegistry
 from .routines import Routine, RoutineRunner, RoutineStore, StateTrigger, TimeTrigger
 from .scenes import Scene, SceneAction, SceneResult, SceneStore, actions_from_state
@@ -72,6 +73,15 @@ class Hub:
         self.adapters = {a.name: a for a in adapters}
         # Contas de fabricante ligadas pela tela "Contas" (AccountStore); None nos testes.
         self.accounts: Any = None
+        # O que o diagnóstico usa: último estado visto por aparelho e falhas recentes.
+        self.last_states: dict[str, tuple[float, DeviceState]] = {}
+        self.recent_errors: deque[dict[str, Any]] = deque(maxlen=200)
+
+    def recovery_hint(self) -> str:
+        return recovery_hint()
+
+    def _note_error(self, device_id: str, command: str, message: str) -> None:
+        self.recent_errors.append({"time": time.time(), "device_id": device_id, "command": command, "message": message})
 
     def set_adapter(self, adapter: Adapter) -> None:
         """Liga (ou troca) um adaptador em tempo de execução, ex.: quando uma conta é conectada."""
@@ -113,8 +123,10 @@ class Hub:
                 state, note = await self.recovery.recover(self, device, command, params or {}, adapter)
         except (AdapterError, KeyError, ValueError) as exc:
             log.warning("Falha em %s %s: %s", device_id, command.value, exc)
+            self._note_error(device_id, command.value, str(exc))
             return CommandResult(device_id=device_id, ok=False, message=str(exc))
         log.info("%s <- %s %s %s", device_id, command.value, params or {}, note)
+        self.last_states[device_id] = (time.monotonic(), state)
         await self.routine_runner.observe(self, device_id, state)
         return CommandResult(device_id=device_id, ok=True, state=state, message=note)
 
@@ -125,7 +137,8 @@ class Hub:
         started = time.monotonic()
         try:
             state = await self._adapter(device).get_state(device)
-        except AdapterError:
+        except AdapterError as exc:
+            self._note_error(device_id, "get_state", str(exc))
             state = DeviceState(online=False)
         if (elapsed := time.monotonic() - started) > 3:
             log.info("Estado de %s levou %.1f s (%s)", device_id, elapsed, device.adapter)
@@ -134,6 +147,7 @@ class Hub:
                 state = await self.recovery.state(self, device, state)
             except Exception as exc:  # a busca na rede nunca pode derrubar a listagem
                 log.warning("Busca de %s na rede local falhou: %s", device_id, exc)
+        self.last_states[device_id] = (time.monotonic(), state)
         await self.routine_runner.observe(self, device_id, state)
         return state
 

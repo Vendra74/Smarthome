@@ -36,6 +36,7 @@ fabricante novo basta escrever um adaptador.
 | Contas | `src/smarthome/accounts.py` | Contas de fabricante ligadas pelo usuário (OAuth, QR, token), guardadas na pasta da casa |
 | Cadastro | `src/smarthome/registry.py` | Lista de dispositivos com cômodo e apelidos, salva em YAML |
 | Cenas | `src/smarthome/scenes.py` | Cena = nome falado + lista de ações (aparelho, comando, parâmetros); o Hub executa, aparelhos em paralelo e ações do mesmo aparelho em ordem |
+| Diagnóstico | `src/smarthome/diagnostics.py` | Achados (gravidade, causa, ação) a partir de estados, erros recentes, rede local, contas, cenas e rotinas; alimenta /health, o aviso no app e a ferramenta `diagnose` do agente |
 | Rotinas | `src/smarthome/routines.py` | Gatilho (horário com dias, ou estado de um aparelho com detecção de borda) que dispara uma cena; relógio em segundo plano a cada 30 s |
 | Hub | `src/smarthome/hub.py` | Valida e despacha comandos, descobre e cadastra dispositivos |
 | Adaptadores | `src/smarthome/adapters/` | SmartThings, LG ThinQ, TV Samsung, TV LG, virtual |

@@ -30,6 +30,7 @@
     <p id="reply" class="reply" aria-live="polite"></p>
   </section>
 
+  <button id="health" class="health" type="button" hidden></button>
   <nav id="scenes" class="scenes" aria-label="Cenas"></nav>
   <nav id="rooms" class="rooms" aria-label="Cômodos"></nav>
   <main id="devices" class="devices"></main>
@@ -112,6 +113,16 @@
         <menu><button type="submit" class="ghost">Agendar</button></menu>
       </form>
     </section>
+  </dialog>
+
+  <dialog id="health-dialog">
+    <h2>Diagnóstico da casa</h2>
+    <p id="health-summary" class="hint"></p>
+    <div id="health-list"></div>
+    <menu>
+      <button type="button" class="ghost" id="health-refresh">Verificar de novo</button>
+      <button type="button" id="health-close">Fechar</button>
+    </menu>
   </dialog>
 
   <dialog id="accounts-dialog">

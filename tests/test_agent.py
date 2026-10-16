@@ -148,3 +148,19 @@ def test_creates_routine_by_conversation(hub):
     reply = asyncio.run(HomeAgent(hub, client=client).handle("todo dia às 22h roda a cena boa noite"))
     assert reply.startswith("Agendado")
     assert hub.routines.get("boa-noite-as-22h").trigger.at == "22:00"
+
+
+def test_agent_explains_failure_with_diagnose(hub, monkeypatch):
+    from smarthome.adapters import samsung_lan
+
+    monkeypatch.setattr(samsung_lan, "lan_blocked", lambda: True)
+    client = FakeClient(
+        [
+            SimpleNamespace(stop_reason="tool_use", content=[tool_use("t1", "diagnose", {"device_id": None})]),
+            SimpleNamespace(stop_reason="end_turn", content=[text("O macOS está bloqueando a rede local; libere em Privacidade e Segurança.")]),
+        ]
+    )
+    reply = asyncio.run(HomeAgent(hub, client=client).handle("por que a TV não liga?"))
+    assert "macOS" in reply
+    tool_result = str(client.requests[-1]["messages"][-1]["content"][0]["content"])
+    assert "lan_blocked" in tool_result

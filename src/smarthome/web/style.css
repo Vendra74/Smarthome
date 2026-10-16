@@ -91,6 +91,18 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .reply:empty { display: none; }
 .reply.thinking::after { content: "…"; }
 
+/* Aviso de diagnóstico: só aparece quando há algo a resolver */
+.health { display: block; width: 100%; margin-top: 12px; text-align: left; background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--text); border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border)); border-radius: 12px; padding: 10px 14px; font-weight: 500; font-size: .92rem; }
+.health.critical { background: color-mix(in srgb, var(--danger) 22%, var(--surface)); }
+.health[hidden] { display: none; }
+.finding { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.finding .title { font-weight: 600; }
+.finding .title::before { content: "● "; color: var(--muted); }
+.finding.warning .title::before, .finding.critical .title::before { color: var(--danger); }
+.finding.ok .title::before { color: #3a9a5b; }
+.finding p { margin: 3px 0 0; font-size: .88rem; color: var(--muted); }
+.finding p.action { color: var(--text); }
+
 /* Cenas: botões logo abaixo do assistente; "+" abre a criação */
 .scenes { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 0 0; }
 .scenes:empty { display: none; }

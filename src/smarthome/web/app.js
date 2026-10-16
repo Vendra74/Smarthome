@@ -60,6 +60,49 @@ async function load() {
   renderRooms();
   renderDevices();
   await refreshStates();
+  checkHealth().catch(() => {});
+}
+
+// ---------- Diagnóstico ----------
+
+let healthReport = null;
+
+async function checkHealth(fresh = false) {
+  healthReport = await api(`/health${fresh ? "?fresh=true" : ""}`);
+  const problems = healthReport.findings.filter((f) => f.level === "warning" || f.level === "critical");
+  const banner = $("#health");
+  banner.hidden = !problems.length;
+  banner.classList.toggle("critical", problems.some((f) => f.level === "critical"));
+  banner.textContent = problems.length === 1 ? `⚠ ${problems[0].title}` : `⚠ ${problems.length} pontos de atenção · toque para ver`;
+  if (!$("#health-dialog").open) return;
+  renderHealth();
+}
+
+function renderHealth() {
+  $("#health-summary").textContent = healthReport?.summary || "";
+  const list = $("#health-list");
+  list.replaceChildren();
+  for (const f of healthReport?.findings || []) {
+    const box = document.createElement("div");
+    box.className = `finding ${f.level}`;
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = f.title;
+    box.append(title);
+    if (f.detail) box.append(Object.assign(document.createElement("p"), { textContent: f.detail }));
+    if (f.action) box.append(Object.assign(document.createElement("p"), { className: "action", textContent: f.action }));
+    list.append(box);
+  }
+}
+
+function setupHealthDialog() {
+  const dialog = $("#health-dialog");
+  $("#health").addEventListener("click", () => { renderHealth(); dialog.showModal(); });
+  $("#health-close").addEventListener("click", () => dialog.close());
+  $("#health-refresh").addEventListener("click", async () => {
+    $("#health-summary").textContent = "Verificando...";
+    try { await checkHealth(true); renderHealth(); } catch (e) { $("#health-summary").textContent = e.message; }
+  });
 }
 
 // ---------- Cenas ----------
@@ -584,6 +627,7 @@ async function refreshStates() {
       const card = document.querySelector(`.row[data-id="${CSS.escape(device.id)}"]`);
       if (card) card.replaceWith(renderCard(device));
     }));
+    checkHealth().catch(() => {}); // usa os estados recém-consultados, sem nova rodada na nuvem
   } catch { /* tenta de novo no próximo ciclo */ }
   finally { refreshing = false; }
 }
@@ -891,6 +935,7 @@ setupAddDialog();
 setupAccountsDialog();
 setupSceneDialog();
 setupRoutineForm();
+setupHealthDialog();
 load().catch((error) => showReply(`Não consegui carregar a casa: ${error.message}`));
 setInterval(refreshStates, 15000);
 document.addEventListener("visibilitychange", refreshStates);

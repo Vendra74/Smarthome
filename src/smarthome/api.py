@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from .accounts import PROVIDERS, OAuthError, SmartThingsOAuth, TuyaQRLogin
 from .agent import HomeAgent
 from .config import account_adapter, build_hub, integration_status
+from .diagnostics import HealthReport, diagnose
 from .hub import Hub
 from .models import CommandRequest, CommandResult, Device, DeviceState, DeviceType, DiscoveredDevice
 from .routines import Routine, StateTrigger, TimeTrigger
@@ -256,6 +257,11 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
     async def remove_routine(routine_id: str) -> None:
         if not _hub().routines.remove(routine_id):
             raise HTTPException(404, "Rotina não encontrada")
+
+    @app.get("/health", response_model=HealthReport)
+    async def health(fresh: bool = False) -> HealthReport:
+        """O que está atrapalhando a central e o que fazer. fresh=true consulta os estados de novo."""
+        return await diagnose(_hub(), fresh=fresh)
 
     @app.get("/integrations", response_model=list[Integration])
     async def integrations() -> list[Integration]:

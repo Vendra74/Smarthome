@@ -58,6 +58,14 @@ relógio da central confere a cada 30 s (hora local do computador) e os
 gatilhos de estado valem quando o estado muda de fato, vistos nos comandos e
 nas consultas do app. Ficam em `data/homes/<id>/routines.yaml`.
 
+**Diagnóstico.** Quando algo atrapalha (TV fora da rede, aparelho offline,
+macOS bloqueando a rede local, conta sem renovação, falhas repetidas, cena
+apontando para aparelho removido), um aviso aparece acima das cenas; tocar
+nele mostra cada ponto com a causa provável e o que fazer. O agente usa o
+mesmo diagnóstico para explicar uma falha ("por que a TV não liga?") em vez
+de só dizer que não conseguiu. Rota: `GET /health` (`?fresh=true` consulta os
+estados de novo).
+
 O microfone do navegador só funciona em `localhost` ou com HTTPS. Para usar no
 celular pela rede de casa, gere um certificado local com
 [mkcert](https://github.com/FiloSottile/mkcert) e suba a central com ele:

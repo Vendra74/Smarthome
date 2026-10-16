@@ -17,6 +17,7 @@ import anthropic
 from .accounts import PROVIDERS
 from .hub import Hub
 from .models import Command, DeviceType
+from .diagnostics import diagnose
 from .routines import StateTrigger, TimeTrigger
 from .scenes import SceneAction
 
@@ -49,6 +50,9 @@ faça as ações direto e ofereça salvar como cena.
 - Rotinas disparam uma cena sozinhas: por horário ("todo dia às 22h, boa noite"; dias seg..dom) ou \
 quando um aparelho muda de estado ("quando a TV da sala ligar, modo filme"). Use create_routine; se a \
 cena ainda não existe, crie a cena antes. Horários são da casa (hora local).
+- Quando um comando falha, um aparelho aparece offline ou a pessoa pergunta "o que está \
+acontecendo" / "por que não funciona", chame diagnose e explique a causa e o que fazer em uma frase, \
+com as palavras do achado; não repita só "não consegui".
 - Nunca diga que fez algo que uma ferramenta não confirmou.
 
 Suas respostas são faladas em voz alta: uma ou duas frases curtas, sem markdown, \
@@ -123,6 +127,17 @@ TOOLS: list[dict[str, Any]] = [
                 "mac": {**_NULLABLE_STR, "description": "MAC da TV, para ligar por Wake-on-LAN"},
             },
             "required": ["name", "type", "adapter", "room", "external_id", "host", "mac"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "diagnose",
+        "description": "Diagnóstico da casa: aparelhos offline, TV fora da rede, bloqueio do sistema, contas sem renovação, falhas repetidas, cenas quebradas; cada achado traz a causa e a ação. Use ao explicar uma falha.",
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {"device_id": {**_NULLABLE_STR, "description": "Só os achados deste aparelho, ou null para a casa toda"}},
+            "required": ["device_id"],
             "additionalProperties": False,
         },
     },
@@ -309,6 +324,10 @@ class HomeAgent:
                 config=config,
             )
             return {"registered": device.model_dump(mode="json")}
+        if name == "diagnose":
+            report = await diagnose(self.hub)
+            findings = [f for f in report.findings if not args.get("device_id") or f.device_id in (args["device_id"], None)]
+            return {"summary": report.summary, "findings": [f.model_dump() for f in findings]}
         if name == "list_scenes":
             return [s.model_dump(mode="json") for s in self.hub.scenes.all()]
         if name == "run_scene":
