@@ -107,11 +107,13 @@ class SmartThingsOAuth:
     def authorize_url(self) -> str:
         state = secrets.token_urlsafe(16)
         self._pending[state] = time.monotonic()
+        # Sem redirect_uri de propósito: a Samsung devolve 403 quando ele vem na URL de
+        # autorização (mesmo igual ao registrado) e usa o único redirect do app quando
+        # falta. O redirect registrado precisa ser o desta central.
         params = {
             "response_type": "code",
             "client_id": self.client_id,
             "scope": ST_SCOPES,
-            "redirect_uri": self.redirect_uri,
             "state": state,
         }
         return str(httpx.URL(ST_AUTHORIZE_URL, params=params))

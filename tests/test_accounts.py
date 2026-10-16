@@ -45,6 +45,7 @@ def test_oauth_authorize_exchange_and_refresh():
     oauth = SmartThingsOAuth("cid", "secret", "http://localhost:8000/auth/smartthings/callback", oauth_transport(calls))
     url = httpx.URL(oauth.authorize_url())
     assert url.params["client_id"] == "cid" and "x:devices:*" in url.params["scope"]
+    assert "redirect_uri" not in url.params  # a Samsung recusa (403) quando ele vem na URL
     state = url.params["state"]
 
     import asyncio
