@@ -74,13 +74,18 @@ class AccountStore:
 ST_AUTHORIZE_URL = "https://api.smartthings.com/oauth/authorize"
 ST_TOKEN_URL = "https://auth-global.api.smartthings.com/oauth/token"
 ST_SCOPES = "r:devices:* x:devices:* r:locations:*"
+# A SmartThings só devolve a autorização para um endereço https público (localhost e
+# IPs da casa dão 403). A ponte é uma página estática que repassa o código para a
+# central, usando o endereço local guardado no "state".
+ST_BRIDGE_URL = "https://vendra74.github.io/Smarthome/auth/smartthings/"
 
 
 class SmartThingsOAuth:
     """Fluxo OAuth de uma SmartApp registrada pela empresa (uma vez, não pelo usuário).
 
     Registro: `smartthings apps:create` (CLI da SmartThings) do tipo API_ONLY com
-    os escopos acima e o redirect `<SMARTHOME_PUBLIC_URL>/auth/smartthings/callback`.
+    os escopos acima e o redirect da ponte (ST_BRIDGE_URL ou SMARTTHINGS_REDIRECT_URI).
+    A ponte devolve o navegador para `<SMARTHOME_PUBLIC_URL>/auth/smartthings/callback`.
     O client id e o secret vão em SMARTTHINGS_CLIENT_ID / SMARTTHINGS_CLIENT_SECRET.
     """
 
@@ -90,8 +95,10 @@ class SmartThingsOAuth:
         client_secret: str,
         redirect_uri: str,
         transport: httpx.AsyncBaseTransport | None = None,
+        return_url: str | None = None,
     ) -> None:
         self.client_id, self.client_secret, self.redirect_uri = client_id, client_secret, redirect_uri
+        self.return_url = return_url or redirect_uri  # para onde a ponte manda o navegador
         self._client = httpx.AsyncClient(timeout=15.0, transport=transport)
         self._pending: dict[str, float] = {}  # state -> quando foi criado
 
@@ -102,10 +109,14 @@ class SmartThingsOAuth:
         if not client_id or not secret:
             return None
         base = (public_url or os.environ.get("SMARTHOME_PUBLIC_URL") or "http://localhost:8000").rstrip("/")
-        return cls(client_id, secret, f"{base}/auth/smartthings/callback")
+        redirect = os.environ.get("SMARTTHINGS_REDIRECT_URI") or ST_BRIDGE_URL
+        return cls(client_id, secret, redirect, return_url=f"{base}/auth/smartthings/callback")
 
     def authorize_url(self) -> str:
-        state = secrets.token_urlsafe(16)
+        # state = nonce + "." + base64url(endereço local): a ponte lê a segunda parte
+        # para saber a qual central devolver; a central só confere o state inteiro.
+        encoded = base64.urlsafe_b64encode(self.return_url.encode()).decode().rstrip("=")
+        state = f"{secrets.token_urlsafe(16)}.{encoded}"
         self._pending[state] = time.monotonic()
         # Sem redirect_uri de propósito: a Samsung devolve 403 quando ele vem na URL de
         # autorização (mesmo igual ao registrado) e usa o único redirect do app quando

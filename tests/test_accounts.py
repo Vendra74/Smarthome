@@ -1,3 +1,4 @@
+import base64
 import json
 import time
 
@@ -32,7 +33,7 @@ def oauth_transport(calls):
         calls.append(request)
         body = dict(httpx.QueryParams(request.content.decode()))
         if body["grant_type"] == "authorization_code":
-            assert body["code"] == "c0de" and body["redirect_uri"].endswith("/auth/smartthings/callback")
+            assert body["code"] == "c0de" and body["redirect_uri"] == "https://ponte.example/auth/smartthings/"
             return httpx.Response(200, json={"access_token": "A1", "refresh_token": "R1", "expires_in": 86400})
         assert body["refresh_token"] == "R1"
         return httpx.Response(200, json={"access_token": "A2", "refresh_token": "R2", "expires_in": 86400})
@@ -42,11 +43,17 @@ def oauth_transport(calls):
 
 def test_oauth_authorize_exchange_and_refresh():
     calls = []
-    oauth = SmartThingsOAuth("cid", "secret", "http://localhost:8000/auth/smartthings/callback", oauth_transport(calls))
+    oauth = SmartThingsOAuth(
+        "cid", "secret", "https://ponte.example/auth/smartthings/", oauth_transport(calls),
+        return_url="http://localhost:8000/auth/smartthings/callback",
+    )
     url = httpx.URL(oauth.authorize_url())
     assert url.params["client_id"] == "cid" and "x:devices:*" in url.params["scope"]
     assert "redirect_uri" not in url.params  # a Samsung recusa (403) quando ele vem na URL
     state = url.params["state"]
+    # a ponte decodifica o endereço local a partir do state
+    nonce, _, encoded = state.partition(".")
+    assert base64.urlsafe_b64decode(encoded + "==").decode() == "http://localhost:8000/auth/smartthings/callback"
 
     import asyncio
 

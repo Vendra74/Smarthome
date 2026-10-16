@@ -114,10 +114,13 @@ cadastra por conversa ("configura a luz nova do quarto").
 [CLI da SmartThings](https://github.com/SmartThingsCommunity/smartthings-cli),
 `smartthings apps:create`, tipo *API_ONLY*, escopos `r:devices:*`,
 `x:devices:*` e `r:locations:*`, e redirect
-`<endereço da central>/auth/smartthings/callback` (por exemplo
-`http://localhost:8000/auth/smartthings/callback`). Copie o *client id* e o
-*client secret* para `SMARTTHINGS_CLIENT_ID` e `SMARTTHINGS_CLIENT_SECRET` no
-`.env`; se a central é aberta por outro endereço, defina `SMARTHOME_PUBLIC_URL`.
+`https://vendra74.github.io/Smarthome/auth/smartthings/` (a *ponte*: a
+SmartThings só devolve a autorização para um endereço https público; essa
+página estática, em `docs/auth/smartthings/`, só repassa o código para a
+central na rede local, usando o endereço guardado no `state`). Copie o *client
+id* e o *client secret* para `SMARTTHINGS_CLIENT_ID` e `SMARTTHINGS_CLIENT_SECRET`
+no `.env`. Quem hospeda a ponte em outro lugar define `SMARTTHINGS_REDIRECT_URI`;
+se a central é aberta por outro endereço, `SMARTHOME_PUBLIC_URL`.
 Até isso existir, *Contas* mostra a Samsung como "ainda não liberada" e o
 token pessoal (`SMARTTHINGS_TOKEN`) continua valendo para desenvolvimento.
 

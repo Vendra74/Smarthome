@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Central da Casa · voltando da SmartThings</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; font: 16px/1.5 system-ui, sans-serif; background: #f6f5f2; color: #1c1c1a; }
+    main { max-width: 420px; padding: 24px; text-align: center; }
+    code { background: #efeee9; padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+    @media (prefers-color-scheme: dark) { body { background: #151515; color: #f1f0ec; } code { background: #2a2a28; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p id="msg">Voltando para a sua central...</p>
+  </main>
+  <script>
+    // Ponte https fixa: a SmartThings só devolve a autorização para um endereço https
+    // público, mas a central da casa roda na rede local. A central coloca no "state"
+    // o endereço para onde voltar (nonce.base64url(url)); esta página só repassa o
+    // código para lá. Sem o client secret, que fica na central, o código não vale nada.
+    (function () {
+      const p = new URLSearchParams(location.search);
+      const state = p.get("state") || "";
+      const dot = state.indexOf(".");
+      const msg = document.getElementById("msg");
+      let target = null;
+      try {
+        const b64 = state.slice(dot + 1).replace(/-/g, "+").replace(/_/g, "/");
+        target = dot > 0 ? new URL(atob(b64)) : null;
+      } catch (e) { target = null; }
+      const local = target && /^https?:$/.test(target.protocol) &&
+        /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|[^.]+\.local)$/i.test(target.hostname);
+      if (!local) {
+        msg.textContent = "Não sei para qual central voltar. Abra a central de novo e clique em Conectar.";
+        return;
+      }
+      for (const k of ["code", "state", "error", "error_description"]) if (p.has(k)) target.searchParams.set(k, p.get(k));
+      msg.innerHTML = "Voltando para <code>" + target.origin + "</code>...";
+      location.replace(target.href);
+    })();
+  </script>
+</body>
+</html>

@@ -137,7 +137,7 @@ def test_smartthings_oauth_callback(hub, tmp_path, monkeypatch):
     hub.home = HomeConfig(id="casa", name="Casa")
     hub.accounts = AccountStore(tmp_path / "accounts")
     app = create_app(hub=hub)
-    app.state.oauth = SmartThingsOAuth("cid", "sec", "http://localhost:8000/auth/smartthings/callback", oauth_transport([]))
+    app.state.oauth = SmartThingsOAuth("cid", "sec", "https://ponte.example/auth/smartthings/", oauth_transport([]), return_url="http://localhost:8000/auth/smartthings/callback")
     with TestClient(app) as client:
         url = httpx.URL(client.post("/accounts/smartthings/start").json()["url"])
         assert url.host == "api.smartthings.com"
