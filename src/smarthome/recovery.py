@@ -273,6 +273,13 @@ class TVRecovery:
                 # A TV acabou de aparecer na nuvem: é a hora de aprender IP e MAC dela,
                 # sem esperar o próximo ciclo de 5 min.
                 self._background_learn(hub)
+            elif state.power and device.config.get("host"):
+                # A SmartThings continua dizendo "ligada" por um tempo depois que a TV
+                # entra em espera; a própria TV, pela rede, diz a verdade na hora.
+                info = await self._info(device.config["host"])
+                if info and not info["power"]:
+                    return DeviceState(online=True, power=False,
+                                       attributes={**state.attributes, "via": "rede local"})
             return state
         if device.config.get("host"):
             found = await self._info(device.config["host"])

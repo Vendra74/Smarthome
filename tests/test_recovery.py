@@ -350,3 +350,17 @@ def test_neighbor_networks_come_from_traceroute_and_gateway_probes(monkeypatch):
     assert [str(n) for n in found] == ["192.168.0.0/24", "192.168.15.0/24"]
     nets = asyncio.run(samsung_lan.scan_networks())
     assert [str(n) for n in nets] == ["10.0.0.0/24", "192.168.0.0/24", "192.168.15.0/24"]
+
+
+def test_tv_in_standby_is_shown_off_even_if_the_cloud_says_on(tmp_path):
+    """A SmartThings segue dizendo 'ligada' depois que a TV entra em espera; a TV, pela rede, corrige."""
+
+    class StaleCloud(FlakyCloud):
+        async def get_state(self, device):
+            return DeviceState(online=True, power=True, attributes={"volume": 12})
+
+    hub, _ = make_hub(tmp_path, StaleCloud(fails=0),
+                      info=lambda host: {"host": host, "name": TV_NAME, "model": "", "mac": "AA", "power": False},
+                      config={"host": "10.0.0.10", "mac": "AA:BB:CC:DD:EE:01"})
+    state = asyncio.run(hub.get_state("tv-sala"))
+    assert state.power is False and state.attributes["volume"] == 12

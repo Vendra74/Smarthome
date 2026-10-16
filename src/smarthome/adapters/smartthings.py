@@ -179,9 +179,44 @@ class SmartThingsAdapter(Adapter):
                     "Para ligar pela rede, ative na TV 'Ligar com dispositivo móvel'."
                 ) from exc
             raise
-        self._state_cache.pop(self._external_id(device), None)
-        self._health_cache.pop(self._external_id(device), None)
-        return await self.get_state(device)
+        external_id = self._external_id(device)
+        previous = self._state_cache.pop(external_id, (0.0, None))[1]
+        self._health_cache.pop(external_id, None)
+        # A nuvem demora alguns segundos para refletir o comando (e, em TV, chega a dizer
+        # "ligada" por um tempo depois de desligar). O estado devolvido já traz o que foi
+        # pedido e vale como cache até a próxima leitura, para o app não "voltar atrás".
+        if previous is None:
+            try:
+                previous = await self.get_state(device)
+            except AdapterError:
+                previous = None
+        state = self._optimistic(command, params, previous)
+        if state is None:
+            return previous if previous is not None else await self.get_state(device)
+        self._state_cache[external_id] = (time.monotonic(), state)
+        return state
+
+    @staticmethod
+    def _optimistic(command: Command, params: dict[str, Any], previous: DeviceState | None) -> DeviceState | None:
+        attributes = dict(previous.attributes) if previous else {}
+        power = previous.power if previous else None
+        if command == Command.TURN_ON:
+            power = True
+        elif command == Command.TURN_OFF:
+            power = False
+        elif command == Command.SET_TEMPERATURE:
+            attributes["target_temperature"] = params.get("celsius")
+        elif command == Command.SET_BRIGHTNESS:
+            attributes["brightness"] = params.get("level")
+        elif command == Command.SET_VOLUME:
+            attributes["volume"] = params.get("level")
+        elif command == Command.SET_MODE:
+            attributes["mode"] = params.get("mode")
+        elif command == Command.SET_FAN_SPEED:
+            attributes["fan_speed"] = params.get("speed")
+        else:
+            return None
+        return DeviceState(online=True, power=power, attributes=attributes)
 
     async def get_state(self, device: Device) -> DeviceState:
         external_id = self._external_id(device)

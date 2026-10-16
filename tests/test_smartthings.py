@@ -187,3 +187,16 @@ def test_turn_off_422_not_found_is_checked_against_the_state(monkeypatch):
         assert "422" in str(exc)
     else:
         raise AssertionError("ligar com 422 deveria falhar")
+
+
+def test_command_result_reflects_the_command_even_if_the_cloud_lags():
+    """Depois de desligar, a SmartThings ainda diz 'on' por um tempo: o estado devolvido já é off."""
+    calls = []
+    adapter = SmartThingsAdapter("token", transport=make_transport(calls))  # /status sempre diz "on"
+    tv = Device(id="tv", name="TV", type=DeviceType.TV, adapter="smartthings", config={"device_id": "t1"})
+    assert asyncio.run(adapter.get_state(tv)).power is True
+    state = asyncio.run(adapter.execute(tv, Command.TURN_OFF, {}))
+    assert state.power is False
+    assert asyncio.run(adapter.get_state(tv)).power is False  # vale como cache por um tempo
+    state = asyncio.run(adapter.execute(tv, Command.SET_VOLUME, {"level": 7}))
+    assert state.power is False and state.attributes["volume"] == 7
