@@ -71,6 +71,13 @@ class TVRecovery:
         except (OSError, ValueError) as exc:
             log.info("Wake-on-LAN preventivo em %s falhou: %s", device.id, exc)
 
+    def _background_scan(self) -> None:
+        """Dispara uma varredura sem esperar por ela (uma de cada vez)."""
+        task = getattr(self, "_scan_task", None)
+        if task is not None and not task.done():
+            return
+        self._scan_task = asyncio.ensure_future(self._scan_shared(max_age=0))
+
     async def _scan_shared(self, max_age: float = 30.0) -> list[dict[str, Any]]:
         """Varre a rede no máximo uma vez a cada `max_age` s, para todas as TVs juntas."""
         async with self._scan_lock:
@@ -170,10 +177,18 @@ class TVRecovery:
             return state
         if device.config.get("host"):
             found = await self._info(device.config["host"])
-        elif time.monotonic() - self._last_scan.get(device.id, -1e9) > 60:
-            self._last_scan[device.id] = time.monotonic()
-            found = await self.locate(hub, device)
+        elif self._scan_cache is not None:
+            # Lista pronta da última varredura; a próxima roda em segundo plano, para a
+            # tela não esperar a rede inteira ser varrida.
+            found = next((tv for tv in self._scan_cache[1] if same_tv(tv["name"], device.name)), None)
+            if found:
+                device.config.update({"host": found["host"], **({"mac": found["mac"]} if found["mac"] else {})})
+                hub.registry.update(device)
+                log.info("%s achada na rede local: %s %s", device.id, found["host"], found["mac"])
+            if time.monotonic() - self._scan_cache[0] > 60:
+                self._background_scan()
         else:
+            self._background_scan()
             found = None
         if found and found["power"]:
             return DeviceState(online=True, power=True, attributes={**state.attributes, "via": "rede local"})

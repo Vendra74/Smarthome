@@ -143,7 +143,15 @@ def test_same_tv_name_matching():
 def test_state_scans_lan_when_tv_has_no_host_yet(tmp_path):
     lan = [{"host": "192.168.0.50", "name": TV_NAME, "model": "", "mac": "AA:BB:CC:DD:EE:FF", "power": True}]
     hub, _ = make_hub(tmp_path, FlakyCloud(fails=99), lan=lan)
-    state = asyncio.run(hub.get_state("tv-sala"))
+
+    async def run():
+        first = await hub.get_state("tv-sala")  # dispara a varredura em segundo plano
+        await hub.recovery._scan_task
+        second = await hub.get_state("tv-sala")  # usa o resultado pronto
+        return first, second
+
+    first, state = asyncio.run(run())
+    assert first.online is False  # a tela não espera a rede ser varrida
     assert state.online is True and state.power is True and state.attributes["via"] == "rede local"
     assert hub.registry.get("tv-sala").config["host"] == "192.168.0.50"
 

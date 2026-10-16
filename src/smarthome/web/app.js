@@ -42,13 +42,15 @@ async function api(path, options = {}) {
 // ---------- Carregar e desenhar ----------
 
 async function load() {
-  const [home, devices] = await Promise.all([api("/home"), api("/devices/with-state")]);
+  // Primeiro o cadastro (instantâneo), depois o estado (consulta nuvens e rede, pode demorar).
+  const [home, devices] = await Promise.all([api("/home"), api("/devices")]);
   state.home = home;
-  state.devices = devices;
+  state.devices = devices.map((d) => ({ ...d, state: undefined }));
   document.title = home.name;
   $("#home-name").textContent = home.name;
   renderRooms();
   renderDevices();
+  await refreshStates();
 }
 
 function roomsInUse() {
@@ -101,6 +103,7 @@ function renderDevices() {
 
 function statusText(device) {
   const s = device.state;
+  if (s === undefined) return "Consultando...";
   if (!s || !s.online) return "Sem conexão";
   const a = s.attributes || {};
   const parts = [s.power === null ? "Estado desconhecido" : s.power ? "Ligado" : "Desligado"];
@@ -229,12 +232,16 @@ async function send(device, command, params = {}) {
   card?.replaceWith(renderCard(device));
 }
 
+let refreshing = false;
+
 async function refreshStates() {
-  if (document.hidden) return;
+  if (document.hidden || refreshing) return;
+  refreshing = true;
   try {
     state.devices = await api("/devices/with-state");
     renderDevices();
   } catch { /* tenta de novo no próximo ciclo */ }
+  finally { refreshing = false; }
 }
 
 // ---------- Assistente: texto e voz ----------

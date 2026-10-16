@@ -148,10 +148,10 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
 
     @app.get("/devices/with-state", response_model=list[DeviceView])
     async def devices_with_state() -> list[DeviceView]:
-        """Tudo que o app precisa para desenhar a tela numa chamada só."""
-        return [
-            DeviceView(**d.model_dump(), state=await _hub().get_state(d.id)) for d in _hub().registry.all()
-        ]
+        """Tudo que o app precisa para desenhar a tela numa chamada só (consultas em paralelo)."""
+        devices = _hub().registry.all()
+        states = await asyncio.gather(*(_hub().get_state(d.id) for d in devices))
+        return [DeviceView(**d.model_dump(), state=s) for d, s in zip(devices, states)]
 
     @app.get("/devices", response_model=list[Device])
     async def list_devices(room: str | None = None) -> list[Device]:
