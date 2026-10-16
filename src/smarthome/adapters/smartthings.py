@@ -201,6 +201,11 @@ class SmartThingsAdapter(Adapter):
         self._state_cache[external_id] = (time.monotonic(), state)
         return state
 
+    async def device_label(self, device: Device) -> str | None:
+        """Nome do aparelho na SmartThings; em TVs Samsung é o nome que a TV anuncia na rede."""
+        data = await self._request("GET", f"/devices/{self._external_id(device)}")
+        return data.get("label") or data.get("name")
+
     async def discover(self) -> list[DiscoveredDevice]:
         data = await self._request("GET", "/devices")
         found = []

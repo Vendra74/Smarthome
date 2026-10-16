@@ -58,6 +58,60 @@ class TVRecovery:
     def applies(self, device: Device) -> bool:
         return device.type == DeviceType.TV and device.adapter == "smartthings"
 
+    @staticmethod
+    def _matches(tv: dict[str, Any], device: Device) -> bool:
+        """A TV da rede é este cadastro? Pelo nome dado pela pessoa, pelo nome na SmartThings
+        (que costuma ser o nome que a TV anuncia), por um apelido ou pelo IP já conhecido."""
+        names = [device.name, device.config.get("st_name") or "", *device.aliases]
+        return any(same_tv(tv["name"], n) for n in names if n) or (
+            bool(device.config.get("host")) and tv["host"] == device.config.get("host")
+        )
+
+    def _remember(self, hub: Hub, device: Device, tv: dict[str, Any]) -> None:
+        if tv["host"] != device.config.get("host") or (tv["mac"] and tv["mac"] != device.config.get("mac")):
+            device.config.update({"host": tv["host"], **({"mac": tv["mac"]} if tv["mac"] else {})})
+            hub.registry.update(device)
+            log.info("%s achada na rede local: %s %s", device.id, tv["host"], tv["mac"])
+
+    async def learn(self, hub: Hub) -> None:
+        """Aprende IP e MAC de todas as TVs cadastradas que estão ligadas na rede agora,
+        mesmo com a nuvem funcionando. É o que permite acordá-las depois."""
+        tvs_at_home = [d for d in hub.registry.all() if self.applies(d)]
+        if not tvs_at_home:
+            return
+        tvs = await self._scan_shared(max_age=0)
+        if not tvs:
+            return
+        for device in tvs_at_home:
+            if not device.config.get("st_name"):
+                adapter = hub.adapters.get(device.adapter)
+                label = getattr(adapter, "device_label", None)
+                if label is not None:
+                    try:
+                        if name := await label(device):
+                            device.config["st_name"] = name
+                            hub.registry.update(device)
+                    except AdapterError as exc:
+                        log.info("Sem nome da SmartThings para %s: %s", device.id, exc)
+            tv = next((t for t in tvs if self._matches(t, device)), None)
+            if tv:
+                self._remember(hub, device, tv)
+            elif not device.config.get("mac"):
+                log.info("%s ainda sem IP/MAC: nenhuma TV na rede com o nome '%s'", device.id, device.name)
+
+    def start_background(self, hub: Hub, interval: float = 300.0) -> asyncio.Task:
+        """Aprende as TVs ao iniciar e a cada `interval` segundos, sem travar nada."""
+
+        async def loop() -> None:
+            while True:
+                try:
+                    await self.learn(hub)
+                except Exception as exc:  # nunca derruba a central
+                    log.warning("Aprendizado das TVs falhou: %s", exc)
+                await self._sleep(interval)
+
+        return asyncio.ensure_future(loop())
+
     def nudge(self, device: Device) -> None:
         """Antes de todo 'ligar' de TV, manda o pacote de acordar se o MAC é conhecido.
 
@@ -100,11 +154,8 @@ class TVRecovery:
                 return found
         tvs = await self._scan_shared()
         for tv in tvs:
-            if same_tv(tv["name"], device.name) or (host and tv["host"] == host):
-                if tv["host"] != host or (tv["mac"] and tv["mac"] != device.config.get("mac")):
-                    device.config.update({"host": tv["host"], **({"mac": tv["mac"]} if tv["mac"] else {})})
-                    hub.registry.update(device)
-                    log.info("%s achada na rede local: %s %s", device.id, tv["host"], tv["mac"])
+            if self._matches(tv, device):
+                self._remember(hub, device, tv)
                 return tv
         return None
 
@@ -180,11 +231,9 @@ class TVRecovery:
         elif self._scan_cache is not None:
             # Lista pronta da última varredura; a próxima roda em segundo plano, para a
             # tela não esperar a rede inteira ser varrida.
-            found = next((tv for tv in self._scan_cache[1] if same_tv(tv["name"], device.name)), None)
+            found = next((tv for tv in self._scan_cache[1] if self._matches(tv, device)), None)
             if found:
-                device.config.update({"host": found["host"], **({"mac": found["mac"]} if found["mac"] else {})})
-                hub.registry.update(device)
-                log.info("%s achada na rede local: %s %s", device.id, found["host"], found["mac"])
+                self._remember(hub, device, found)
             if time.monotonic() - self._scan_cache[0] > 60:
                 self._background_scan()
         else:

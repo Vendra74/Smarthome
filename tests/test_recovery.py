@@ -262,3 +262,28 @@ def test_one_scan_serves_all_tvs_and_logs_only_changes(tmp_path, caplog):
         asyncio.run(hub.get_state("tv-1"))
     assert len(scans) == 1  # três TVs offline, uma varredura só
     assert caplog.text.count("TVs Samsung na rede local") == 1
+
+
+def test_learn_matches_tv_by_smartthings_label_even_when_user_renamed_it(tmp_path):
+    """'TV da sala' não bate com o nome que a TV anuncia; o nome na SmartThings bate."""
+
+    class Cloud(FlakyCloud):
+        async def device_label(self, device):
+            return "[TV] Samsung 6 Series (55)"
+
+    registry = DeviceRegistry(tmp_path / "devices.yaml")
+    registry.add(Device(id="tv-sala", name="TV da sala", type=DeviceType.TV, adapter="smartthings",
+                        config={"device_id": "st-1"}))
+    lan = [{"host": "10.0.0.10", "name": "[TV] Samsung 6 Series (55)", "model": "", "mac": "AA:BB:CC:DD:EE:01", "power": True}]
+
+    async def scan():
+        return lan
+
+    async def no_sleep(_s):
+        pass
+
+    recovery = TVRecovery(scan=scan, sleep=no_sleep)
+    hub = Hub(registry, [Cloud(fails=0)], recovery=recovery)
+    asyncio.run(recovery.learn(hub))
+    saved = DeviceRegistry(tmp_path / "devices.yaml").get("tv-sala").config
+    assert saved == {"device_id": "st-1", "st_name": "[TV] Samsung 6 Series (55)", "host": "10.0.0.10", "mac": "AA:BB:CC:DD:EE:01"}

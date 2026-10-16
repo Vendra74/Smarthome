@@ -100,7 +100,10 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
         _setup_logging()
         app.state.hub = hub or build_hub()
         app.state.agent = agent
+        # Aprende IP e MAC das TVs ligadas agora e de tempos em tempos, para acordá-las depois.
+        learner = app.state.hub.recovery.start_background(app.state.hub)
         yield
+        learner.cancel()
 
     app = FastAPI(title="Central da Casa", version="0.1.0", lifespan=lifespan)
     app.state.oauth = None

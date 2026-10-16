@@ -235,11 +235,22 @@ async function send(device, command, params = {}) {
 let refreshing = false;
 
 async function refreshStates() {
+  // Um pedido por aparelho, em paralelo: cada card atualiza assim que a resposta dele
+  // chega, em vez de a tela inteira esperar o mais lento (nuvem da LG, TV em espera...).
   if (document.hidden || refreshing) return;
   refreshing = true;
   try {
-    state.devices = await api("/devices/with-state");
-    renderDevices();
+    const devices = await api("/devices");
+    const previous = new Map(state.devices.map((d) => [d.id, d.state]));
+    const changed = devices.length !== state.devices.length || devices.some((d, i) => state.devices[i]?.id !== d.id);
+    state.devices = devices.map((d) => ({ ...d, state: previous.get(d.id) }));
+    if (changed) renderDevices();
+    await Promise.all(state.devices.map(async (device) => {
+      try { device.state = await api(`/devices/${encodeURIComponent(device.id)}/state`); }
+      catch { device.state = null; }
+      const card = document.querySelector(`.card[data-id="${CSS.escape(device.id)}"]`);
+      if (card) card.replaceWith(renderCard(device));
+    }));
   } catch { /* tenta de novo no próximo ciclo */ }
   finally { refreshing = false; }
 }

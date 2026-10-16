@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import unicodedata
 from typing import TYPE_CHECKING, Any
 
@@ -112,10 +113,13 @@ class Hub:
         device = self.registry.get(device_id)
         if device is None:
             return None
+        started = time.monotonic()
         try:
             state = await self._adapter(device).get_state(device)
         except AdapterError:
             state = DeviceState(online=False)
+        if (elapsed := time.monotonic() - started) > 3:
+            log.info("Estado de %s levou %.1f s (%s)", device_id, elapsed, device.adapter)
         if self.recovery.applies(device):
             try:
                 state = await self.recovery.state(self, device, state)
