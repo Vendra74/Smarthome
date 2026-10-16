@@ -196,6 +196,20 @@ async def diagnose(hub: Hub, fresh: bool = False) -> HealthReport:
                 action="Confira se está na tomada e no Wi-Fi; se o Wi-Fi mudou, refaça o pareamento no app do fabricante.",
             ))
 
+    # 4b. TV Samsung na rede que ainda não autorizou a central (tecla pela rede depende disso)
+    local = hub.adapters.get("samsung_tv")
+    paired = getattr(local, "paired", None)
+    if paired is not None:
+        for d in devices:
+            if d.type == DeviceType.TV and d.adapter in ("smartthings", "samsung_tv") and d.config.get("host") and not paired(d):
+                findings.append(Finding(
+                    level="info", code="tv_unpaired", device_id=d.id,
+                    title=f"{d.name} ainda não autorizou a central pela rede",
+                    detail="Sem essa autorização, a central só consegue ligá-la pela nuvem ou pelo pacote de acordar.",
+                    action="Ligue a TV pelo controle e deixe-a ligada um minuto: a central pede a autorização e a TV mostra "
+                           "'Central Casa' na tela; aceite com o controle. É uma vez só.",
+                ))
+
     # Várias TVs na mesma situação viram um achado só
     findings = _group(findings, "tv_unknown_lan",
                       lambda n: f"{n} TVs estão fora da nuvem e a central ainda não as viu na rede",

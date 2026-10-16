@@ -61,6 +61,8 @@ class TVRecovery:
         self._scan_lock = asyncio.Lock()
         self._last_logged: list[tuple[Any, ...]] | None = None
         self._last_learn = -1e9
+        self._pair_attempts: dict[str, float] = {}
+        self._pair_tasks: dict[str, asyncio.Task] = {}
 
     def last_scan(self) -> tuple[float, list[dict[str, Any]]] | None:
         """(idade em segundos, TVs vistas) da última varredura, ou None se ainda não houve."""
@@ -153,10 +155,33 @@ class TVRecovery:
 
     def stop(self) -> None:
         """Cancela buscas e aprendizados em andamento (no encerramento da central)."""
-        for name in ("_scan_task", "_learn_task"):
-            task = getattr(self, name, None)
+        tasks = [getattr(self, name, None) for name in ("_scan_task", "_learn_task")] + list(self._pair_tasks.values())
+        for task in tasks:
             if task is not None and not task.done():
                 task.cancel()
+
+    def _background_pair(self, hub: Hub, device: Device, min_gap: float = 3600.0) -> None:
+        """Pede autorização à TV em segundo plano (ela mostra o pedido na tela), no máximo
+        uma vez por hora por TV, só quando ela está ligada."""
+        local = hub.adapters.get("samsung_tv")
+        pair, paired = getattr(local, "pair", None), getattr(local, "paired", None)
+        if pair is None or paired is None or paired(device):
+            return
+        last = self._pair_attempts.get(device.id, -1e9)
+        if time.monotonic() - last < min_gap:
+            return
+        self._pair_attempts[device.id] = time.monotonic()
+
+        async def run() -> None:
+            try:
+                if await pair(device):
+                    log.info("%s autorizou a central pela rede", device.id)
+                else:
+                    log.info("%s: pedido de autorização não foi aceito na TV", device.id)
+            except AdapterError as exc:
+                log.info("%s: pareamento falhou: %s", device.id, exc)
+
+        self._pair_tasks[device.id] = asyncio.ensure_future(run())
 
     def _background_learn(self, hub: Hub, min_gap: float = 60.0) -> None:
         """Roda `learn` em segundo plano, no máximo uma vez a cada `min_gap` s."""
@@ -233,12 +258,15 @@ class TVRecovery:
             # algumas ignoram o Wake-on-LAN e só acordam com a tecla POWER pela rede.
             local = hub.adapters.get("samsung_tv")
             power_key = getattr(local, "power_key", None)
-            if power_key is not None:
+            paired = getattr(local, "paired", lambda d: True)
+            if power_key is not None and paired(device):
                 try:
                     await power_key(device)
                     log.info("%s: tecla POWER mandada pela rede", device.id)
                 except AdapterError as exc:
                     log.info("%s: tecla POWER pela rede falhou: %s", device.id, exc)
+            elif power_key is not None:
+                log.info("%s: ainda não autorizou a central; a tecla pela rede só vale depois do pareamento", device.id)
         waited = 0.0
         while waited < self.timeout:
             await self._sleep(self.interval)
@@ -297,6 +325,10 @@ class TVRecovery:
                 if info and not info["power"]:
                     return DeviceState(online=True, power=False,
                                        attributes={**state.attributes, "via": "rede local"})
+                if info:
+                    # TV ligada e na rede: hora de pedir a autorização dela, se ainda não
+                    # tem, para a tecla pela rede funcionar depois, com ela em espera.
+                    self._background_pair(hub, device)
             return state
         found = None
         if device.config.get("host"):

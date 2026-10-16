@@ -30,7 +30,31 @@ KNOWN_APPS = {
 class SamsungTVAdapter(Adapter):
     name = "samsung_tv"
 
-    def _connect(self, device: Device):
+    @staticmethod
+    def _token_file(device: Device) -> Path:
+        return Path(device.config.get("token_file", f"tokens/{device.id}.token"))
+
+    def paired(self, device: Device) -> bool:
+        """A TV já autorizou a central (há token guardado)? Sem isso, a tecla pela rede só
+        funciona com a TV ligada e aceitando o pedido na tela."""
+        path = self._token_file(device)
+        return path.exists() and path.stat().st_size > 0
+
+    async def pair(self, device: Device, timeout: float = 30.0) -> bool:
+        """Pede autorização à TV (ela mostra 'Central Casa' na tela; a pessoa aceita com o
+        controle). Só funciona com a TV ligada. Devolve True se o token foi guardado."""
+        def do() -> None:
+            tv = self._connect(device, timeout=timeout)
+            tv.open()
+            tv.close()
+
+        try:
+            await asyncio.to_thread(do)
+        except Exception as exc:
+            raise AdapterError(f"TV Samsung {device.id}: pareamento falhou: {exc}") from exc
+        return self.paired(device)
+
+    def _connect(self, device: Device, timeout: float = 5):
         try:
             import urllib3
             from samsungtvws import SamsungTVWS
@@ -38,14 +62,14 @@ class SamsungTVAdapter(Adapter):
             raise AdapterError("Instale o extra samsung: pip install -e '.[samsung]'") from exc
         # A TV usa certificado próprio; o aviso a cada comando só polui o log.
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        token_file = Path(device.config.get("token_file", f"tokens/{device.id}.token"))
+        token_file = self._token_file(device)
         token_file.parent.mkdir(parents=True, exist_ok=True)
         return SamsungTVWS(
             host=device.config["host"],
             port=device.config.get("port", 8002),
             token_file=str(token_file),
             name="Central Casa",
-            timeout=5,  # sem isso, TV desligada segura cada comando (e o encerramento) por 75 s
+            timeout=timeout,  # sem isso, TV desligada segura cada comando (e o encerramento) por 75 s
         )
 
     def _run(self, device: Device, command: Command, params: dict[str, Any]) -> None:

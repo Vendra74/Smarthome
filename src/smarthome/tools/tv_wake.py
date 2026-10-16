@@ -3,6 +3,7 @@
 Uso (na pasta do projeto, com o .env da central):
     python -m smarthome.tools.tv_wake <id-da-tv>        # ex.: tv-samsung-6-series-55-sala
     python -m smarthome.tools.tv_wake <id-da-tv> 40     # espera até 40 s (padrão 25)
+    python -m smarthome.tools.tv_wake <id-da-tv> parear # com a TV LIGADA: pede a autorização dela
 
 Mostra o IP e o MAC guardados, se a TV responde na porta 8001 agora (e o que diz
 sobre energia), manda o pacote de acordar para cada destino e fica perguntando à TV
@@ -34,7 +35,7 @@ def _send(mac: str, target: str) -> str:
         return f"FALHOU: {exc}"
 
 
-async def main(device_id: str, wait: float) -> None:
+async def main(device_id: str, wait: float, mode: str = "") -> None:
     hub = build_hub()
     device = hub.registry.get(device_id)
     if device is None:
@@ -42,7 +43,23 @@ async def main(device_id: str, wait: float) -> None:
         print(f"TV '{device_id}' não cadastrada. TVs: {ids}")
         return
     host, mac = device.config.get("host"), device.config.get("mac")
+    local = hub.adapters.get("samsung_tv")
     print(f"{device.name}: ip guardado={host or '?'}  mac guardado={mac or '?'}")
+    if local is not None:
+        print("Autorização da TV para a central (pareamento): " + ("já feita" if local.paired(device) else "AINDA NÃO"))
+    if mode == "parear":
+        if local is None or not host:
+            print("Precisa do adaptador samsung_tv ativo e do IP da TV.")
+            return
+        print("\nLIGUE A TV pelo controle e deixe-a ligada. Pedindo autorização (até 30 s)...")
+        print("Vai aparecer na tela da TV um pedido de 'Central Casa': aceite com o controle.")
+        try:
+            ok = await local.pair(device)
+        except Exception as exc:
+            print(f"  falhou: {exc}")
+            return
+        print("  autorizado e guardado." if ok else "  não foi aceito (ou a TV não estava ligada).")
+        return
     print(f"Central em {samsung_lan.local_ip() or '?'} (rede {samsung_lan.local_network() or '?'})")
     if host and samsung_lan.local_network() and ipaddress.ip_address(host) not in samsung_lan.local_network():
         print("ATENÇÃO: o IP da TV está em outra rede que a central.")
@@ -75,9 +92,11 @@ async def main(device_id: str, wait: float) -> None:
         # TV que responde em espera mas não diz se está ligada: o Wake-on-LAN costuma ser
         # ignorado por ela; a tecla POWER pela rede é o que a acorda.
         print("\nEsta TV não informa energia pela porta 8001. Mandando a tecla POWER pela rede (8002)...")
-        local = hub.adapters.get("samsung_tv")
         if local is None:
             print("  adaptador samsung_tv não está ativo nesta central; adicione-o em adapters no home.yaml.")
+        elif not local.paired(device):
+            print("  a TV ainda não autorizou a central, e em espera ela não mostra o pedido. Ligue a TV")
+            print(f"  pelo controle e rode: python -m smarthome.tools.tv_wake {device.id} parear")
         else:
             try:
                 await local.power_key(device)
@@ -104,4 +123,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
-    asyncio.run(main(sys.argv[1], float(sys.argv[2]) if len(sys.argv) > 2 else 25.0))
+    args = sys.argv[2:]
+    mode = "parear" if "parear" in args else ""
+    waits = [a for a in args if a != "parear"]
+    asyncio.run(main(sys.argv[1], float(waits[0]) if waits else 25.0, mode))

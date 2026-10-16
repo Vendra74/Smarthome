@@ -412,3 +412,43 @@ def test_tv_reachable_but_mute_about_power_gets_the_power_key(tmp_path):
     hub, woken = make_hub(tmp_path, cloud, lan=lan, local=local)
     result = asyncio.run(hub.execute("tv-sala", Command.TURN_ON))
     assert result.ok and woken and local.keys == ["tv-sala"]
+
+
+def test_unpaired_tv_is_paired_while_on_and_key_waits_for_pairing(tmp_path):
+    """Sem autorização, a tecla pela rede não é tentada; com a TV ligada na nuvem, a central pede a autorização."""
+
+    class LocalPairing(LocalTV):
+        def __init__(self):
+            super().__init__()
+            self.keys, self.pairs, self.is_paired = [], [], False
+
+        def paired(self, device):
+            return self.is_paired
+
+        async def pair(self, device):
+            self.pairs.append(device.id)
+            self.is_paired = True
+            return True
+
+        async def power_key(self, device):
+            self.keys.append(device.id)
+
+    class OnlineCloud(FlakyCloud):
+        async def get_state(self, device):
+            return DeviceState(online=True, power=True)
+
+    local = LocalPairing()
+    lan = [{"host": "192.168.0.217", "name": TV_NAME, "model": "", "mac": "64:1C:B0:0F:B9:3A", "power": True, "power_known": False}]
+    hub, _ = make_hub(tmp_path, FlakyCloud(fails=2), lan=lan, local=local,
+                      info=lambda host: lan[0], config={"host": "192.168.0.217", "mac": "64:1C:B0:0F:B9:3A"})
+    asyncio.run(hub.execute("tv-sala", Command.TURN_ON))
+    assert local.keys == []  # não pareada: não tenta a tecla
+
+    hub.set_adapter(OnlineCloud(fails=0))
+
+    async def flow():
+        await hub.get_state("tv-sala")
+        await asyncio.gather(*hub.recovery._pair_tasks.values())
+
+    asyncio.run(flow())
+    assert local.pairs == ["tv-sala"] and local.is_paired
