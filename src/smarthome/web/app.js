@@ -15,6 +15,7 @@ const state = {
   home: null,
   devices: [],
   room: ALL_ROOMS,
+  open: null, // linha com o detalhe aberto por toque (celular)
   sessionId: loadSessionId(),
 };
 
@@ -91,83 +92,148 @@ function renderDevices() {
   for (const room of rooms) {
     const devices = state.devices.filter((d) => (d.room || NO_ROOM) === room);
     if (!devices.length) continue;
-    if (rooms.length > 1) {
-      const title = document.createElement("h2");
-      title.className = "room-title";
-      title.textContent = room;
-      main.append(title);
-    }
-    for (const device of devices) main.append(renderCard(device));
+    main.append(renderRoom(room, devices));
   }
+}
+
+// Um painel por cômodo: cabeçalho com "Desligar tudo" e uma linha por aparelho.
+function renderRoom(room, devices) {
+  const section = document.createElement("section");
+  section.className = "room";
+  const header = document.createElement("header");
+  const title = document.createElement("h2");
+  title.textContent = room;
+  header.append(title);
+  const lit = devices.filter((d) => d.state?.power && d.capabilities.includes("turn_off"));
+  if (lit.length) {
+    const off = document.createElement("button");
+    off.type = "button";
+    off.className = "room-off";
+    off.textContent = "Desligar tudo";
+    off.addEventListener("click", () => lit.forEach((d) => send(d, "turn_off")));
+    header.append(off);
+  }
+  section.append(header, ...devices.map(renderCard));
+  return section;
 }
 
 function statusText(device) {
   const s = device.state;
   if (s === undefined) return "Consultando...";
-  if (!s || !s.online) return "Sem conexão";
-  const a = s.attributes || {};
-  const parts = [s.power === null ? "Estado desconhecido" : s.power ? "Ligado" : "Desligado"];
-  if (s.power) {
-    if (a.brightness != null) parts.push(`${a.brightness}%`);
-    if (a.target_temperature != null) parts.push(`${a.target_temperature}°C`);
-    if (a.mode) parts.push(AC_MODES[a.mode] || a.mode);
-    if (a.app) parts.push(a.app);
-    if (a.volume != null) parts.push(`volume ${a.volume}`);
+  const a = (s && s.attributes) || {};
+  if (!s || !s.online) {
+    return device.type === "tv" && device.config.mac ? "Em espera · acorda pela rede" : "Sem conexão";
   }
+  const parts = [];
+  if (s.power === null) parts.push("Estado desconhecido");
+  else if (!s.power) parts.push(device.type === "light" ? "Apagada" : device.type === "tv" ? "Desligada" : "Desligado");
+  else if (device.type === "ac") parts.push(`${AC_MODES[a.mode] || a.mode || "ligado"}${a.target_temperature != null ? ` ${a.target_temperature}°C` : ""}`);
+  else if (device.type === "tv") parts.push(a.app || "Ligada", ...(a.volume != null ? [`volume ${a.volume}`] : []));
+  else if (device.type === "light") parts.push("Acesa", ...(a.brightness != null ? [`${a.brightness}%`] : []));
+  else parts.push("Ligado");
+  if (a.muted) parts.push("mudo");
   if (a.temperature != null) parts.push(`ambiente ${a.temperature}°C`);
   if (a.via) parts.push(`via ${a.via}`);
   return parts.join(" · ");
 }
 
+const canHover = window.matchMedia("(hover: hover)").matches;
+
+// Linha do aparelho: ícone | nome e estado | controle principal | interruptor.
+// O detalhe (apps, modos) aparece ao passar o mouse; no celular, ao tocar na linha.
 function renderCard(device) {
-  const card = $("#device-card").content.firstElementChild.cloneNode(true);
-  card.dataset.id = device.id;
+  const row = document.createElement("article");
+  row.className = "row";
+  row.dataset.id = device.id;
   const s = device.state || {};
   const attrs = s.attributes || {};
-  card.classList.toggle("on", !!s.power);
-  card.classList.toggle("offline", s.online === false);
-  card.querySelector(".icon").textContent = ICONS[device.type] || ICONS.other;
-  card.querySelector("h3").textContent = device.name;
-  card.querySelector(".status").textContent = statusText(device);
-
+  row.classList.toggle("on", !!s.power);
+  row.classList.toggle("offline", s.online === false);
+  row.classList.toggle("open", state.open === device.id);
   const can = (cmd) => device.capabilities.includes(cmd);
-  const power = card.querySelector(".power");
-  power.checked = !!s.power;
-  power.setAttribute("aria-label", `Ligar ou desligar ${device.name}`);
-  if (!can("turn_on") && !can("turn_off")) power.closest(".switch").hidden = true;
-  power.addEventListener("change", () => send(device, power.checked ? "turn_on" : "turn_off"));
 
-  const controls = card.querySelector(".controls");
-  if (can("set_brightness")) {
-    controls.append(slider("Brilho", attrs.brightness ?? 100, "%", (level) => send(device, "set_brightness", { level })));
-  }
+  const main = document.createElement("div");
+  main.className = "main";
+  main.innerHTML = `<span class="icon" aria-hidden="true"></span><div class="title"><h3></h3><p class="status"></p></div>`;
+  main.querySelector(".icon").textContent = ICONS[device.type] || ICONS.other;
+  main.querySelector("h3").textContent = device.name;
+  main.querySelector(".status").textContent = statusText(device);
+
+  const quick = document.createElement("div");
+  quick.className = "quick";
   if (can("set_temperature")) {
-    controls.append(stepper(attrs.target_temperature ?? 23, (celsius) => send(device, "set_temperature", { celsius })));
+    quick.append(stepper(attrs.target_temperature ?? 23, (celsius) => send(device, "set_temperature", { celsius })));
+  } else if (can("set_volume")) {
+    quick.append(slider("Volume", attrs.volume ?? 20, "", (level) => send(device, "set_volume", { level })));
+  } else if (can("set_brightness")) {
+    quick.append(slider("Brilho", attrs.brightness ?? 100, "%", (level) => send(device, "set_brightness", { level })));
   }
+  quick.addEventListener("click", (e) => e.stopPropagation());
+  main.append(quick);
+
+  if (can("turn_on") || can("turn_off")) {
+    const sw = document.createElement("label");
+    sw.className = "switch";
+    sw.setAttribute("aria-label", `Ligar ou desligar ${device.name}`);
+    sw.innerHTML = `<input type="checkbox" class="power"><span></span>`;
+    const power = sw.querySelector("input");
+    power.checked = !!s.power;
+    power.addEventListener("change", () => send(device, power.checked ? "turn_on" : "turn_off"));
+    sw.addEventListener("click", (e) => e.stopPropagation());
+    main.append(sw);
+  }
+  row.append(main);
+
+  const more = document.createElement("div");
+  more.className = "more";
+  const inner = document.createElement("div");
+  inner.className = "inner";
   if (can("set_mode")) {
-    controls.append(chips(Object.entries(AC_MODES), attrs.mode, (mode) => send(device, "set_mode", { mode })));
-  }
-  if (can("set_volume")) {
-    controls.append(slider("Volume", attrs.volume ?? 20, "", (level) => send(device, "set_volume", { level })));
+    inner.append(chips(Object.entries(AC_MODES), attrs.mode, (mode) => send(device, "set_mode", { mode })));
   }
   if (can("open_app")) {
     const options = TV_APPS.map((app) => [app, app]);
     if (can("mute")) options.push(["__mute__", attrs.muted ? "tirar mudo" : "mudo"]);
-    controls.append(
+    inner.append(
       chips(options, attrs.app, (value) =>
         value === "__mute__" ? send(device, "mute", { muted: !attrs.muted }) : send(device, "open_app", { app: value })
       )
     );
   }
-  return card;
+  if (can("set_brightness") && !can("set_temperature")) {
+    inner.append(chips([["25", "25%"], ["50", "50%"], ["100", "100%"]], String(attrs.brightness ?? ""), (v) => send(device, "set_brightness", { level: Number(v) })));
+  }
+  if (device.type === "tv" && s.online === false) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = device.config.mac
+      ? "Ligar manda o pacote de acordar pela rede; a SmartThings pode demorar uns segundos para refletir."
+      : "A central ainda não aprendeu o IP e o MAC desta TV: ligue-a uma vez pelo controle com a central rodando.";
+    inner.append(hint);
+  }
+  if (inner.childElementCount) {
+    inner.addEventListener("click", (e) => e.stopPropagation());
+    const clip = document.createElement("div");
+    clip.append(inner);
+    more.append(clip);
+    row.append(more);
+    row.classList.add("has-more");
+    if (!canHover) {
+      row.addEventListener("click", () => {
+        state.open = state.open === device.id ? null : device.id;
+        renderDevices();
+      });
+    }
+  }
+  return row;
 }
 
 function slider(label, value, unit, onCommit) {
   const row = document.createElement("label");
   row.className = "control";
-  row.innerHTML = `<span></span><input type="range" min="0" max="100" step="1"><output></output>`;
-  row.firstElementChild.textContent = label;
+  row.innerHTML = `<input type="range" min="0" max="100" step="1"><output></output>`;
   const input = row.querySelector("input");
+  input.setAttribute("aria-label", label);
   const output = row.querySelector("output");
   input.value = value;
   output.textContent = value + unit;
@@ -178,10 +244,9 @@ function slider(label, value, unit, onCommit) {
 
 function stepper(value, onCommit) {
   const row = document.createElement("div");
-  row.className = "control";
-  row.innerHTML = `<span>Temperatura</span><div class="stepper">
-    <button type="button" aria-label="Diminuir temperatura">−</button><output></output>
-    <button type="button" aria-label="Aumentar temperatura">+</button></div>`;
+  row.className = "stepper";
+  row.innerHTML = `<button type="button" aria-label="Diminuir temperatura">−</button><output></output>
+    <button type="button" aria-label="Aumentar temperatura">+</button>`;
   const output = row.querySelector("output");
   let current = Number(value);
   let timer;
@@ -216,7 +281,7 @@ function chips(options, selected, onPick) {
 // ---------- Comandos ----------
 
 async function send(device, command, params = {}) {
-  const card = document.querySelector(`.card[data-id="${CSS.escape(device.id)}"]`);
+  const card = document.querySelector(`.row[data-id="${CSS.escape(device.id)}"]`);
   card?.classList.add("busy");
   try {
     const result = await api(`/devices/${encodeURIComponent(device.id)}/commands`, {
@@ -248,7 +313,7 @@ async function refreshStates() {
     await Promise.all(state.devices.map(async (device) => {
       try { device.state = await api(`/devices/${encodeURIComponent(device.id)}/state`); }
       catch { device.state = null; }
-      const card = document.querySelector(`.card[data-id="${CSS.escape(device.id)}"]`);
+      const card = document.querySelector(`.row[data-id="${CSS.escape(device.id)}"]`);
       if (card) card.replaceWith(renderCard(device));
     }));
   } catch { /* tenta de novo no próximo ciclo */ }
@@ -541,6 +606,14 @@ function setupAccountsDialog() {
     showReply(err ? "A conexão com a Samsung não foi concluída. Tente de novo em Contas." : "Conta SmartThings conectada. Use Adicionar para cadastrar os aparelhos.");
   }
 }
+
+// No celular, tocar fora de uma linha fecha o detalhe aberto.
+document.addEventListener("click", (e) => {
+  if (!canHover && state.open && !e.target.closest(".row")) {
+    state.open = null;
+    renderDevices();
+  }
+});
 
 setupAddDialog();
 setupAccountsDialog();
