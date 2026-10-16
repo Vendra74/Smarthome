@@ -1,0 +1,38 @@
+[project]
+name = "smarthome"
+version = "0.1.0"
+description = "Central de controle da casa inteligente: API, agente de voz e adaptadores de dispositivos"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+    "anthropic>=1.0",
+    "python-dotenv>=1.0",
+    "certifi",
+    "samsungtvws>=2.6",
+    "tuya-device-sharing-sdk>=0.2",
+    "segno>=1.6",
+]
+
+[project.optional-dependencies]
+samsung = ["samsungtvws>=2.6"]
+lg = ["aiowebostv>=0.4", "thinqconnect>=1.0", "certifi"]
+tuya = ["tinytuya>=1.15"]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+smarthome = ["web/*"]

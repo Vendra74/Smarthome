@@ -1,0 +1,35 @@
+# Exemplo da casa de referência. Copie a pasta para data/homes/casa e ajuste.
+# Os dispositivos "virtual" servem para testar a central sem hardware.
+devices:
+  - id: luz-sala
+    name: Luz da sala
+    room: sala
+    type: light
+    adapter: virtual
+    aliases: [luz principal]
+  - id: ar-quarto
+    name: Ar do quarto
+    room: quarto
+    type: ac
+    adapter: virtual
+  # Lâmpada ou ar-condicionado cadastrado no app SmartThings
+  # - id: luz-cozinha
+  #   name: Luz da cozinha
+  #   room: cozinha
+  #   type: light
+  #   adapter: smartthings
+  #   config: {device_id: "<id do SmartThings>"}
+  # TV Samsung pela rede local
+  # - id: tv-sala
+  #   name: TV da sala
+  #   room: sala
+  #   type: tv
+  #   adapter: samsung_tv
+  #   config: {host: 192.168.0.50, mac: "AA:BB:CC:DD:EE:FF"}
+  # TV LG pela rede local
+  # - id: tv-quarto
+  #   name: TV do quarto
+  #   room: quarto
+  #   type: tv
+  #   adapter: lg_tv
+  #   config: {host: 192.168.0.51, mac: "AA:BB:CC:DD:EE:00", client_key: "<gerada no pareamento>"}

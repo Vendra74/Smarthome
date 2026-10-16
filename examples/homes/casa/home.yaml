@@ -1,0 +1,14 @@
+# Descrição da casa. Uma pasta destas por casa.
+name: Casa do Andre
+rooms: [sala, quarto, cozinha]
+# Integrações ativas nesta casa
+adapters: [virtual, samsung_tv, lg_tv, smartthings, lg_thinq, tuya]
+smartthings:
+  token_env: SMARTTHINGS_TOKEN  # nome da variável de ambiente com o token desta casa
+lg_thinq:
+  token_env: LG_THINQ_TOKEN  # token pessoal do LG ThinQ desta casa
+  country: BR
+tuya:  # Intelbras Izy Smart, Smart Life, Tuya Smart (projeto em iot.tuya.com)
+  access_id_env: TUYA_ACCESS_ID
+  access_secret_env: TUYA_ACCESS_SECRET
+  region: us

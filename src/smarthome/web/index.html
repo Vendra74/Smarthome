@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)">
+  <title>Central da Casa</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1 id="home-name">Casa</h1>
+    <div class="top-actions">
+      <button id="open-network" class="ghost" type="button">Rede</button>
+      <button id="open-accounts" class="ghost" type="button">Contas</button>
+      <button id="add-device" class="ghost" type="button">Adicionar</button>
+    </div>
+  </header>
+
+  <section class="assistant" aria-label="Assistente">
+    <form id="ask-form" class="ask">
+      <button id="mic" class="mic" type="button" aria-label="Falar com a central" title="Falar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+      </button>
+      <input id="ask-input" type="text" autocomplete="off" placeholder="Acende a luz da sala..." aria-label="Pedido para a central">
+      <button class="send" type="submit">Enviar</button>
+    </form>
+    <p id="reply" class="reply" aria-live="polite"></p>
+  </section>
+
+  <button id="health" class="health" type="button" hidden></button>
+  <nav id="scenes" class="scenes" aria-label="Cenas"></nav>
+  <nav id="rooms" class="rooms" aria-label="Cômodos"></nav>
+  <main id="devices" class="devices"></main>
+  <p id="empty" class="empty" hidden>Nenhum dispositivo cadastrado ainda. Use "Adicionar" ou peça por voz: "configura a luz nova da cozinha".</p>
+
+  <dialog id="add-dialog">
+    <form id="add-form" method="dialog">
+      <h2>Adicionar dispositivo</h2>
+      <div id="discovered"></div>
+      <label>Nome <input name="name" required placeholder="Luz da cozinha"></label>
+      <label>Cômodo <input name="room" list="room-list" placeholder="cozinha"></label>
+      <datalist id="room-list"></datalist>
+      <label>Tipo
+        <select name="type">
+          <option value="light">Luz</option>
+          <option value="tv">TV</option>
+          <option value="ac">Ar-condicionado</option>
+          <option value="switch">Tomada / interruptor</option>
+          <option value="sensor">Sensor (só estado)</option>
+          <option value="other">Outro</option>
+        </select>
+      </label>
+      <label>Integração
+        <select name="adapter">
+          <option value="smartthings">SmartThings</option>
+          <option value="lg_thinq">LG ThinQ</option>
+          <option value="tuya">Tuya / Izy Smart (Intelbras)</option>
+          <option value="samsung_tv">TV Samsung (rede local)</option>
+          <option value="lg_tv">TV LG (rede local)</option>
+          <option value="virtual">Virtual (teste)</option>
+        </select>
+      </label>
+      <div class="tv-fields">
+        <label>IP da TV <input name="host" placeholder="192.168.0.50"></label>
+        <label>MAC da TV <input name="mac" placeholder="AA:BB:CC:DD:EE:FF"></label>
+      </div>
+      <input type="hidden" name="device_id">
+      <p id="add-error" class="error" hidden></p>
+      <menu>
+        <button type="button" class="ghost" id="add-cancel">Cancelar</button>
+        <button type="submit" value="save">Salvar</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="scene-dialog">
+    <form id="scene-form" method="dialog">
+      <h2>Nova cena</h2>
+      <p class="hint">Deixe os aparelhos do jeito que a cena deve ficar, marque quais entram e dê um nome. Depois é só tocar no botão da cena (ou pedir por voz).</p>
+      <label>Nome <input name="name" required placeholder="Modo filme"></label>
+      <div id="scene-devices" class="scene-devices"></div>
+      <p id="scene-error" class="error" hidden></p>
+      <menu>
+        <button type="button" class="ghost" id="scene-cancel">Cancelar</button>
+        <button type="submit" value="save">Salvar cena</button>
+      </menu>
+    </form>
+    <section id="scene-list" class="scene-list" hidden>
+      <h3>Cenas existentes</h3>
+      <div></div>
+    </section>
+    <section id="routine-section" class="scene-list" hidden>
+      <h3>Rotinas</h3>
+      <p class="hint">Uma cena disparada sozinha, num horário ou quando um aparelho ligar. Por voz dá para fazer qualquer gatilho ("quando a TV da sala ligar, modo filme").</p>
+      <div id="routine-list"></div>
+      <form id="routine-form" class="routine-form">
+        <label>Cena <select name="scene_id"></select></label>
+        <label>Horário <input name="at" type="time" required></label>
+        <fieldset class="days">
+          <legend>Dias</legend>
+          <label><input type="checkbox" name="day" value="seg">seg</label>
+          <label><input type="checkbox" name="day" value="ter">ter</label>
+          <label><input type="checkbox" name="day" value="qua">qua</label>
+          <label><input type="checkbox" name="day" value="qui">qui</label>
+          <label><input type="checkbox" name="day" value="sex">sex</label>
+          <label><input type="checkbox" name="day" value="sab">sáb</label>
+          <label><input type="checkbox" name="day" value="dom">dom</label>
+        </fieldset>
+        <p id="routine-error" class="error" hidden></p>
+        <menu><button type="submit" class="ghost">Agendar</button></menu>
+      </form>
+    </section>
+  </dialog>
+
+  <dialog id="health-dialog">
+    <h2>Diagnóstico da casa</h2>
+    <p id="health-summary" class="hint"></p>
+    <div id="health-list"></div>
+    <menu>
+      <button type="button" class="ghost" id="health-refresh">Verificar de novo</button>
+      <button type="button" id="health-close">Fechar</button>
+    </menu>
+  </dialog>
+
+  <dialog id="network-dialog">
+    <h2>Rede da casa</h2>
+    <p id="network-summary" class="hint"></p>
+    <div id="network-list"></div>
+    <menu>
+      <button type="button" class="ghost" id="network-refresh">Buscar de novo</button>
+      <button type="button" id="network-close">Fechar</button>
+    </menu>
+  </dialog>
+
+  <dialog id="accounts-dialog">
+    <h2>Contas</h2>
+    <p class="hint">Entre com a conta de cada app que você usa em casa. A central encontra os aparelhos sozinha.</p>
+    <div id="accounts-list"></div>
+
+    <section id="tuya-flow" class="account-flow" hidden>
+      <h3>Smart Life / Tuya</h3>
+      <p class="hint">No app Smart Life (ou Tuya Smart): <b>Eu › Configurações › Conta e segurança › Código de usuário</b>. Digite o código aqui e depois leia o QR code com o app (botão de scanner no canto superior direito).</p>
+      <form id="tuya-form">
+        <label>Código de usuário <input name="user_code" required autocomplete="off" placeholder="ex.: AB1cd2EF"></label>
+        <menu>
+          <button type="submit">Gerar QR code</button>
+        </menu>
+      </form>
+      <div id="tuya-qr" hidden>
+        <img alt="QR code para ler no Smart Life">
+        <p class="hint">Aguardando a confirmação no app...</p>
+      </div>
+    </section>
+
+    <section id="lg-flow" class="account-flow" hidden>
+      <h3>LG ThinQ</h3>
+      <p class="hint">A LG ainda não tem login por conta para apps de terceiros. Gere um token pessoal em <a href="https://connect-pat.lgthinq.com" target="_blank" rel="noopener">connect-pat.lgthinq.com</a> (entre com a conta do app ThinQ) e cole aqui. Ele fica só nesta central.</p>
+      <form id="lg-form">
+        <label>Token pessoal <input name="token" required autocomplete="off"></label>
+        <menu><button type="submit">Conectar</button></menu>
+      </form>
+    </section>
+
+    <p id="accounts-error" class="error" hidden></p>
+    <menu>
+      <button type="button" class="ghost" id="accounts-close">Fechar</button>
+    </menu>
+  </dialog>
+
+
+  <script src="app.js"></script>
+</body>
+</html>
