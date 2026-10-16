@@ -364,3 +364,20 @@ def test_tv_in_standby_is_shown_off_even_if_the_cloud_says_on(tmp_path):
                       config={"host": "10.0.0.10", "mac": "AA:BB:CC:DD:EE:01"})
     state = asyncio.run(hub.get_state("tv-sala"))
     assert state.power is False and state.attributes["volume"] == 12
+
+
+def test_tv_without_power_state_is_woken_instead_of_assumed_on(tmp_path):
+    """TV que responde na rede mas não informa PowerState pode estar em espera: acorda e espera a nuvem."""
+    cloud = FlakyCloud(fails=2)
+    lan = [{"host": "10.0.0.18", "name": TV_NAME, "model": "", "mac": "AA:BB:CC:DD:EE:FF", "power": True, "power_known": False}]
+    hub, woken = make_hub(tmp_path, cloud, lan=lan)
+    result = asyncio.run(hub.execute("tv-sala", Command.TURN_ON))
+    assert result.ok and woken and "acordei pela rede" in result.message
+
+
+def test_tv_without_power_state_does_not_show_on_when_cloud_says_offline(tmp_path):
+    hub, _ = make_hub(tmp_path, FlakyCloud(fails=99),
+                      info=lambda host: {"host": host, "name": TV_NAME, "model": "", "mac": "AA", "power": True, "power_known": False},
+                      config={"host": "10.0.0.18", "mac": "AA:BB:CC:DD:EE:01"})
+    state = asyncio.run(hub.get_state("tv-sala"))
+    assert state.online is False

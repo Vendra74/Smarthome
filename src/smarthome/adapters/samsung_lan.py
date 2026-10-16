@@ -69,7 +69,10 @@ async def tv_info(host: str, timeout: float = 2.0) -> dict[str, Any] | None:
         "name": html.unescape(device.get("name") or data.get("name") or ""),
         "model": device.get("modelName", ""),
         "mac": (device.get("wifiMac") or "").upper() or None,
+        # Nem toda TV informa PowerState: sem o campo, "responde na rede" não quer dizer
+        # "ligada" (em espera ela também responde), e power_known avisa isso a quem usa.
         "power": device.get("PowerState", "on") == "on",
+        "power_known": "PowerState" in device,
     }
 
 

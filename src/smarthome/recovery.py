@@ -32,6 +32,12 @@ log = logging.getLogger(__name__)
 HINT = "Confira na TV 'Ligar com dispositivo móvel' e se ela está na mesma rede da central."
 
 
+def _surely_on(tv: dict[str, Any]) -> bool:
+    """A TV está ligada de verdade? Só quando ela mesma informa o estado de energia:
+    TV sem esse campo responde na rede também em espera, e aí "respondeu" não basta."""
+    return bool(tv.get("power")) and tv.get("power_known", True)
+
+
 def hint() -> str:
     """Dica para a pessoa; aponta o bloqueio do macOS quando foi ele que impediu a busca."""
     return samsung_lan.MACOS_HINT if samsung_lan.lan_blocked() else HINT
@@ -209,7 +215,7 @@ class TVRecovery:
         """Tenta cumprir o comando pela rede local. Devolve (estado, nota) ou levanta AdapterError."""
         self._scan_cache = None  # num comando, vale a rede de agora
         tv = await self.locate(hub, device)
-        if tv and tv["power"]:
+        if tv and _surely_on(tv):
             return await self._local(hub, device, command, params, adapter)
         if command == Command.TURN_OFF:
             return DeviceState(online=False, power=False), f"{device.name} já estava desligada."
@@ -233,7 +239,7 @@ class TVRecovery:
                 # acordou, "ligar" está cumprido mesmo com a SmartThings atrasada.
                 if host and command == Command.TURN_ON:
                     info = await self._info(host)
-                    if info and info["power"]:
+                    if info and _surely_on(info):
                         return DeviceState(power=True), f"{device.name} acordou pela rede; a SmartThings ainda não a vê."
                 continue
             return state, f"{device.name} estava fora do alcance; acordei pela rede."
@@ -294,6 +300,6 @@ class TVRecovery:
         else:
             self._background_scan()
             found = None
-        if found and found["power"]:
+        if found and _surely_on(found):
             return DeviceState(online=True, power=True, attributes={**state.attributes, "via": "rede local"})
         return state
