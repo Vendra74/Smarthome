@@ -6,7 +6,7 @@ from smarthome.models import Command, Device, DeviceType
 
 class FakeApi:
     def __init__(self):
-        self.status = {"mode": "COOL", "power": "POWER_OFF", "cool": 24.0, "current": 27.0}
+        self.status = {"mode": "COOL", "power": "POWER_OFF", "cool": 24.0, "current": 27.0, "wind": "MID"}
 
     async def async_get_device_list(self):
         return [
@@ -35,6 +35,7 @@ class FakeAC:
             "air_con_operation_mode": self._s["power"],
             "cool_target_temperature_c": self._s["cool"],
             "current_temperature_c": self._s["current"],
+            "wind_strength": self._s.get("wind"),
         }.get(prop)
 
     async def set_air_con_operation_mode(self, value):
@@ -51,6 +52,10 @@ class FakeAC:
 
     async def set_heat_target_temperature_c(self, value):
         self.calls.append(("heat", value))
+
+    async def set_wind_strength(self, value):
+        self.calls.append(("wind", value))
+        self.api.status["wind"] = value
 
 
 def make():
@@ -74,11 +79,26 @@ def test_discover_maps_types_and_skips_items_without_id():
 def test_ac_power_mode_and_temperature():
     adapter, ac, device = make()
     state = asyncio.run(adapter.execute(device, Command.TURN_ON, {}))
-    assert state.power is True and state.attributes == {"mode": "cool", "target_temperature": 24.0, "temperature": 27.0}
+    assert state.power is True and state.attributes == {"mode": "cool", "fan_speed": "medium", "target_temperature": 24.0, "temperature": 27.0}
 
     asyncio.run(adapter.execute(device, Command.SET_TEMPERATURE, {"celsius": 22}))
     asyncio.run(adapter.execute(device, Command.SET_MODE, {"mode": "dry"}))
     assert ac.calls == [("power", "POWER_ON"), ("cool", 22.0), ("mode", "AIR_DRY")]
+
+
+def test_fan_speed_maps_to_wind_strength():
+    adapter, ac, device = make()
+    adapter._api.status["power"] = "POWER_ON"
+    state = asyncio.run(adapter.execute(device, Command.SET_FAN_SPEED, {"speed": "high"}))
+    assert ac.calls == [("wind", "HIGH")] and state.attributes["fan_speed"] == "high"
+    adapter._api.status["wind"] = "POWER"  # turbo da LG aparece como alta
+    assert asyncio.run(adapter.get_state(device)).attributes["fan_speed"] == "high"
+    try:
+        asyncio.run(adapter.execute(device, Command.SET_FAN_SPEED, {"speed": "turbo"}))
+    except Exception as exc:
+        assert "turbo" in str(exc)
+    else:
+        raise AssertionError("velocidade inválida deveria falhar")
 
 
 def test_temperature_uses_heat_setter_in_heat_mode():

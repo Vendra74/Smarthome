@@ -40,6 +40,8 @@ def _to_smartthings(command: Command, params: dict[str, Any]) -> tuple[str, str,
         return "thermostatCoolingSetpoint", "setCoolingSetpoint", [float(params["celsius"])]
     if command == Command.SET_MODE:
         return "airConditionerMode", "setAirConditionerMode", [params["mode"]]
+    if command == Command.SET_FAN_SPEED:
+        return "airConditionerFanMode", "setFanMode", [params["speed"]]
     if command == Command.SET_VOLUME:
         return "audioVolume", "setVolume", [int(params["level"])]
     if command == Command.MUTE:
@@ -189,6 +191,7 @@ class SmartThingsAdapter(Adapter):
             "target_temperature": value("thermostatCoolingSetpoint", "coolingSetpoint"),
             "temperature": value("temperatureMeasurement", "temperature"),
             "mode": value("airConditionerMode", "airConditionerMode"),
+            "fan_speed": value("airConditionerFanMode", "fanMode"),
             "volume": value("audioVolume", "volume"),
         }
         online = await self._is_online(device)

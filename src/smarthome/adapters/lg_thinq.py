@@ -26,6 +26,9 @@ AIR_CONDITIONER = "DEVICE_AIR_CONDITIONER"
 # Modos da central -> modos (job mode) do ar LG
 AC_MODES = {"cool": "COOL", "heat": "HEAT", "dry": "AIR_DRY", "fan": "FAN", "auto": "AUTO"}
 AC_MODES_BACK = {v: k for k, v in AC_MODES.items()}
+# Velocidades da central -> força do vento (wind strength) do ar LG
+FAN_SPEEDS = {"low": "LOW", "medium": "MID", "high": "HIGH", "auto": "AUTO"}
+FAN_SPEEDS_BACK = {v: k for k, v in FAN_SPEEDS.items()} | {"SLOW": "low", "POWER": "high"}
 
 
 class LGThinQAdapter(Adapter):
@@ -101,8 +104,10 @@ class LGThinQAdapter(Adapter):
             if mode == "AUTO"
             else ac.get_status("cool_target_temperature_c")
         ) or ac.get_status("target_temperature_c")
+        wind = ac.get_status("wind_strength")
         attributes = {
             "mode": AC_MODES_BACK.get(mode, mode),
+            "fan_speed": FAN_SPEEDS_BACK.get(wind, wind.lower() if isinstance(wind, str) else wind),
             "target_temperature": target,
             "temperature": ac.get_status("current_temperature_c"),
         }
@@ -133,7 +138,7 @@ class LGThinQAdapter(Adapter):
                     )
                 return state.model_copy(update={"power": wanted})
             if not state.power:
-                raise AdapterError(f"{device.name} está desligado; ligue-o antes de mudar temperatura ou modo") from exc
+                raise AdapterError(f"{device.name} está desligado; ligue-o antes de mudar temperatura, modo ou ventilação") from exc
             raise
 
     async def _execute_ac(self, device: Device, ac: Any, command: Command, params: dict[str, Any]) -> DeviceState:
@@ -146,6 +151,11 @@ class LGThinQAdapter(Adapter):
             if mode is None:
                 raise AdapterError(f"Modo {params['mode']} não existe no ar LG")
             await self._call(ac.set_current_job_mode(mode))
+        elif command == Command.SET_FAN_SPEED:
+            speed = FAN_SPEEDS.get(str(params["speed"]))
+            if speed is None:
+                raise AdapterError(f"Velocidade {params['speed']} não existe no ar LG (use low, medium, high ou auto)")
+            await self._call(ac.set_wind_strength(speed))
         elif command == Command.SET_TEMPERATURE:
             celsius = float(params["celsius"])
             await self._refresh(device, ac)  # o setter certo depende do modo atual

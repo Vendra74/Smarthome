@@ -23,7 +23,7 @@
 
 **Uma regra só:** tudo passa pelo `Hub`. App, voz e Alexa nunca falam direto
 com fabricante; falam com o Hub usando o vocabulário único de comandos
-(`turn_on`, `set_brightness`, `set_temperature`, `open_app` ...). Cada
+(`turn_on`, `set_brightness`, `set_temperature`, `set_fan_speed`, `open_app` ...). Cada
 adaptador traduz esse vocabulário para o protocolo dele. Para suportar um
 fabricante novo basta escrever um adaptador.
 

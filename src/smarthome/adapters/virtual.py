@@ -30,6 +30,8 @@ class VirtualAdapter(Adapter):
             state.attributes["target_temperature"] = float(params["celsius"])
         elif command == Command.SET_MODE:
             state.attributes["mode"] = params["mode"]
+        elif command == Command.SET_FAN_SPEED:
+            state.attributes["fan_speed"] = params["speed"]
         elif command == Command.SET_VOLUME:
             state.attributes["volume"] = int(params["level"])
         elif command == Command.MUTE:

@@ -143,3 +143,16 @@ def test_state_is_cached_and_survives_rate_limit():
     adapter._state_cache["tv"] = (0.0, first)  # força o TTL a vencer
     third = asyncio.run(adapter.get_state(tv))  # a SmartThings devolve 429: vale o último estado
     assert third.power is True and calls[-1] == "/v1/devices/tv/status"
+
+
+def test_fan_speed_uses_fan_mode_capability():
+    calls = []
+    adapter = SmartThingsAdapter("token", transport=make_transport(calls))
+    device = Device(id="a", name="Ar", type=DeviceType.AC, adapter="smartthings", config={"device_id": "ar1"})
+    asyncio.run(adapter.execute(device, Command.SET_FAN_SPEED, {"speed": "high"}))
+    assert json.loads(calls[0][2])["commands"][0] == {
+        "component": "main",
+        "capability": "airConditionerFanMode",
+        "command": "setFanMode",
+        "arguments": ["high"],
+    }

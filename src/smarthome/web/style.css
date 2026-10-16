@@ -157,6 +157,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .row.open .more { grid-template-rows: 1fr; }
 .hint { flex-basis: 100%; margin: 0; font-size: .8rem; color: var(--muted); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.labeled { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.labeled > span { font-size: .78rem; color: var(--muted); margin-right: 2px; }
 .chips button {
   padding: 5px 11px;
   font-size: .82rem;

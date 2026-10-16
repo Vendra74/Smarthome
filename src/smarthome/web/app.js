@@ -5,6 +5,7 @@
 
 const ICONS = { light: "💡", tv: "📺", ac: "❄️", switch: "🔌", sensor: "🌡️", other: "⚙️" };
 const AC_MODES = { cool: "frio", heat: "quente", dry: "seco", fan: "ventilar", auto: "auto" };
+const FAN_SPEEDS = { low: "baixa", medium: "média", high: "alta", auto: "auto" };
 const TV_APPS = ["netflix", "youtube", "globoplay", "prime video"];
 const ALL_ROOMS = "__all__";
 const NO_ROOM = "Sem cômodo";
@@ -127,7 +128,10 @@ function statusText(device) {
   const parts = [];
   if (s.power === null) parts.push("Estado desconhecido");
   else if (!s.power) parts.push(device.type === "light" ? "Apagada" : device.type === "tv" ? "Desligada" : "Desligado");
-  else if (device.type === "ac") parts.push(`${AC_MODES[a.mode] || a.mode || "ligado"}${a.target_temperature != null ? ` ${a.target_temperature}°C` : ""}`);
+  else if (device.type === "ac") {
+    parts.push(`${AC_MODES[a.mode] || a.mode || "ligado"}${a.target_temperature != null ? ` ${a.target_temperature}°C` : ""}`);
+    if (a.fan_speed) parts.push(`vent. ${FAN_SPEEDS[a.fan_speed] || a.fan_speed}`);
+  }
   else if (device.type === "tv") parts.push(a.app || "Ligada", ...(a.volume != null ? [`volume ${a.volume}`] : []));
   else if (device.type === "light") parts.push("Acesa", ...(a.brightness != null ? [`${a.brightness}%`] : []));
   else parts.push("Ligado");
@@ -190,6 +194,9 @@ function renderCard(device) {
   inner.className = "inner";
   if (can("set_mode")) {
     inner.append(chips(Object.entries(AC_MODES), attrs.mode, (mode) => send(device, "set_mode", { mode })));
+  }
+  if (can("set_fan_speed")) {
+    inner.append(labeled("Ventilação", chips(Object.entries(FAN_SPEEDS), attrs.fan_speed, (speed) => send(device, "set_fan_speed", { speed }))));
   }
   if (can("open_app")) {
     const options = TV_APPS.map((app) => [app, app]);
@@ -262,6 +269,16 @@ function stepper(value, onCommit) {
   plus.addEventListener("click", () => change(1));
   show();
   return row;
+}
+
+// Rótulo curto antes de um grupo de chips (ex.: "Ventilação" no ar-condicionado)
+function labeled(text, control) {
+  const box = document.createElement("div");
+  box.className = "labeled";
+  const label = document.createElement("span");
+  label.textContent = text;
+  box.append(label, control);
+  return box;
 }
 
 function chips(options, selected, onPick) {

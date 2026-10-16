@@ -76,11 +76,12 @@ TOOLS: list[dict[str, Any]] = [
                 "level": {"type": ["integer", "null"], "description": "0-100 para set_brightness e set_volume"},
                 "celsius": {"type": ["number", "null"], "description": "Para set_temperature"},
                 "mode": {**_NULLABLE_STR, "description": "Para set_mode: cool, heat, dry, fan, auto"},
+                "speed": {**_NULLABLE_STR, "description": "Para set_fan_speed (ventilação do ar): low, medium, high, auto"},
                 "muted": {"type": ["boolean", "null"], "description": "Para mute"},
                 "channel": {**_NULLABLE_STR, "description": "Para set_channel"},
                 "app": {**_NULLABLE_STR, "description": "Para open_app, ex.: netflix"},
             },
-            "required": ["device_id", "command", "level", "celsius", "mode", "muted", "channel", "app"],
+            "required": ["device_id", "command", "level", "celsius", "mode", "speed", "muted", "channel", "app"],
             "additionalProperties": False,
         },
     },
@@ -159,7 +160,7 @@ class HomeAgent:
         if name == "send_command":
             params = {
                 k: args[k]
-                for k in ("level", "celsius", "mode", "muted", "channel", "app")
+                for k in ("level", "celsius", "mode", "speed", "muted", "channel", "app")
                 if args.get(k) is not None
             }
             result = await self.hub.execute(args["device_id"], Command(args["command"]), params)

@@ -30,6 +30,7 @@ class Command(str, Enum):
     SET_BRIGHTNESS = "set_brightness"  # params: level 0-100
     SET_TEMPERATURE = "set_temperature"  # params: celsius
     SET_MODE = "set_mode"  # params: mode (cool, heat, dry, fan, auto)
+    SET_FAN_SPEED = "set_fan_speed"  # params: speed (low, medium, high, auto)
     SET_VOLUME = "set_volume"  # params: level 0-100
     MUTE = "mute"  # params: muted bool
     SET_CHANNEL = "set_channel"  # params: channel
@@ -52,6 +53,7 @@ DEFAULT_CAPABILITIES: dict[DeviceType, list[Command]] = {
         Command.TURN_OFF,
         Command.SET_TEMPERATURE,
         Command.SET_MODE,
+        Command.SET_FAN_SPEED,
     ],
     DeviceType.SWITCH: [Command.TURN_ON, Command.TURN_OFF],
     DeviceType.SENSOR: [],
