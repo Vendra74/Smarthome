@@ -19,6 +19,7 @@ from .agent import HomeAgent
 from .config import account_adapter, build_hub, integration_status
 from .hub import Hub
 from .models import CommandRequest, CommandResult, Device, DeviceState, DeviceType, DiscoveredDevice
+from .scenes import Scene, SceneAction, SceneResult
 
 
 class NewDevice(BaseModel):
@@ -28,6 +29,15 @@ class NewDevice(BaseModel):
     room: str | None = None
     config: dict[str, Any] = {}
     aliases: list[str] = []
+
+
+class NewScene(BaseModel):
+    """Cena nova: com ações explícitas ou salvando o estado atual de alguns aparelhos."""
+
+    name: str
+    aliases: list[str] = []
+    actions: list[SceneAction] = []
+    from_devices: list[str] = []  # ids cujo estado atual vira a cena
 
 
 class AgentRequest(BaseModel):
@@ -184,6 +194,32 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
         if _hub().registry.get(device_id) is None:
             raise HTTPException(404, "Dispositivo não encontrado")
         return await _hub().execute(device_id, body.command, body.params)
+
+    @app.get("/scenes", response_model=list[Scene])
+    async def list_scenes() -> list[Scene]:
+        return _hub().scenes.all()
+
+    @app.post("/scenes", response_model=Scene, status_code=201)
+    async def add_scene(body: NewScene) -> Scene:
+        try:
+            if body.from_devices:
+                return await _hub().snapshot_scene(body.name, body.from_devices, body.aliases)
+            if not body.actions:
+                raise ValueError("Uma cena precisa de ações ou de aparelhos para copiar o estado")
+            return _hub().create_scene(body.name, body.actions, body.aliases)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/scenes/{scene_id}", status_code=204)
+    async def remove_scene(scene_id: str) -> None:
+        if not _hub().scenes.remove(scene_id):
+            raise HTTPException(404, "Cena não encontrada")
+
+    @app.post("/scenes/{scene_id}/run", response_model=SceneResult)
+    async def run_scene(scene_id: str) -> SceneResult:
+        if _hub().scenes.get(scene_id) is None:
+            raise HTTPException(404, "Cena não encontrada")
+        return await _hub().run_scene(scene_id)
 
     @app.get("/integrations", response_model=list[Integration])
     async def integrations() -> list[Integration]:

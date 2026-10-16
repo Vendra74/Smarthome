@@ -5,6 +5,7 @@ API HTTP, agente de voz e (no futuro) a skill da Alexa chamam só o Hub.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -16,6 +17,7 @@ from .adapters.samsung_lan import same_tv
 from .models import Command, CommandResult, Device, DeviceState, DeviceType, DiscoveredDevice
 from .recovery import TVRecovery
 from .registry import DeviceRegistry
+from .scenes import Scene, SceneAction, SceneResult, SceneStore, actions_from_state
 
 if TYPE_CHECKING:
     from .config import HomeConfig
@@ -54,8 +56,10 @@ class Hub:
         adapters: list[Adapter],
         home: HomeConfig | None = None,
         recovery: TVRecovery | None = None,
+        scenes: SceneStore | None = None,
     ) -> None:
         self.home = home
+        self.scenes = scenes or SceneStore()
         self.recovery = recovery or TVRecovery()
         self.registry = registry
         self.integrations: list[dict[str, str]] = []
@@ -178,3 +182,55 @@ class Hub:
             aliases=aliases or [],
         )
         return self.registry.add(device)
+
+    # ---------- Cenas ----------
+
+    async def run_scene(self, scene_id: str) -> SceneResult:
+        """Executa a cena: aparelhos em paralelo, ações de um mesmo aparelho em ordem
+        (ligar antes de ajustar)."""
+        scene = self.scenes.get(scene_id)
+        if scene is None:
+            return SceneResult(scene_id=scene_id, ok=False)
+        by_device: dict[str, list[SceneAction]] = {}
+        for action in scene.actions:
+            by_device.setdefault(action.device_id, []).append(action)
+
+        async def run_device(actions: list[SceneAction]) -> list[CommandResult]:
+            out = []
+            for action in actions:
+                result = await self.execute(action.device_id, action.command, action.params)
+                out.append(result)
+                if not result.ok:
+                    break  # sem ligar, não adianta ajustar
+            return out
+
+        groups = await asyncio.gather(*(run_device(a) for a in by_device.values()))
+        results = [r for group in groups for r in group]
+        log.info("Cena %s: %d/%d ações ok", scene_id, sum(r.ok for r in results), len(results))
+        return SceneResult(scene_id=scene_id, ok=all(r.ok for r in results), results=results)
+
+    def create_scene(self, name: str, actions: list[SceneAction], aliases: list[str] | None = None) -> Scene:
+        for action in actions:
+            device = self.registry.get(action.device_id)
+            if device is None:
+                raise ValueError(f"Dispositivo '{action.device_id}' não está cadastrado")
+            if not device.supports(action.command):
+                raise ValueError(f"{device.name} não aceita o comando {action.command.value}")
+        base = slugify(name) or "cena"
+        scene_id, n = base, 2
+        while self.scenes.get(scene_id):
+            scene_id, n = f"{base}-{n}", n + 1
+        return self.scenes.add(Scene(id=scene_id, name=name, aliases=aliases or [], actions=actions))
+
+    async def snapshot_scene(self, name: str, device_ids: list[str], aliases: list[str] | None = None) -> Scene:
+        """Salva o estado atual dos aparelhos escolhidos como uma cena."""
+        actions: list[SceneAction] = []
+        for device_id in device_ids:
+            device = self.registry.get(device_id)
+            if device is None:
+                raise ValueError(f"Dispositivo '{device_id}' não está cadastrado")
+            state = await self.get_state(device_id) or DeviceState(online=False)
+            actions.extend(actions_from_state(device_id, state, device.capabilities))
+        if not actions:
+            raise ValueError("Nenhum aparelho com estado para salvar na cena")
+        return self.create_scene(name, actions, aliases)

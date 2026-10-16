@@ -43,6 +43,13 @@ campo do topo aceita pedidos em português, digitados ou falados pelo botão do
 microfone; a resposta aparece na tela e é falada. Dá para instalar na tela
 inicial do celular ("Adicionar à tela de início").
 
+**Cenas.** Os botões logo abaixo do assistente disparam várias ações de uma
+vez ("Modo filme", "Sair de casa"). Para criar uma, deixe os aparelhos como a
+cena deve ficar, toque em *+ Cena*, marque quais entram e dê o nome: a central
+salva o estado atual deles. Por voz também: "cria a cena modo filme com a TV da
+sala no Netflix e a luz em 20%", "ativa o modo filme", "salva a sala assim como
+cena jantar". As cenas ficam em `data/homes/<id>/scenes.yaml`.
+
 O microfone do navegador só funciona em `localhost` ou com HTTPS. Para usar no
 celular pela rede de casa, gere um certificado local com
 [mkcert](https://github.com/FiloSottile/mkcert) e suba a central com ele:

@@ -111,3 +111,21 @@ def test_home_context_in_system_prompt(hub):
     client = FakeClient([SimpleNamespace(stop_reason="end_turn", content=[text("Oi.")])])
     asyncio.run(HomeAgent(hub, client=client).handle("oi"))
     assert "Casa do Andre. Cômodos: sala, quarto." in client.requests[0]["system"]
+
+
+def test_creates_and_runs_scene_by_conversation(hub):
+    client = FakeClient(
+        [
+            SimpleNamespace(stop_reason="tool_use", content=[tool_use("t1", "create_scene", {
+                "name": "Modo filme", "aliases": ["cinema"], "from_devices": [],
+                "actions": [{"device_id": "luz-sala", "command": "set_brightness", "level": 20, "celsius": None,
+                             "mode": None, "speed": None, "muted": None, "channel": None, "app": None}],
+            })]),
+            SimpleNamespace(stop_reason="tool_use", content=[tool_use("t2", "run_scene", {"scene_id": "modo-filme"})]),
+            SimpleNamespace(stop_reason="end_turn", content=[text("Criei e ativei o modo filme.")]),
+        ]
+    )
+    reply = asyncio.run(HomeAgent(hub, client=client).handle("cria a cena modo filme com a luz da sala em 20% e ativa"))
+    assert reply == "Criei e ativei o modo filme."
+    assert hub.scenes.get("modo-filme").aliases == ["cinema"]
+    assert asyncio.run(hub.get_state("luz-sala")).attributes["brightness"] == 20

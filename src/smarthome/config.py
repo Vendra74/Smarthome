@@ -30,6 +30,7 @@ from .adapters.tuya_sharing import TuyaSharingAdapter
 from .adapters.virtual import VirtualAdapter
 from .hub import Hub
 from .registry import DeviceRegistry
+from .scenes import SceneStore
 
 
 class SmartThingsConfig(BaseModel):
@@ -154,7 +155,7 @@ def build_hub(home_id: str | None = None, data_dir: Path | None = None) -> Hub:
     folder = home_dir(home.id, data_dir)
     registry = DeviceRegistry(folder / "devices.yaml")
     accounts = AccountStore(folder / "accounts")
-    hub = Hub(registry, build_adapters(home, accounts), home=home)
+    hub = Hub(registry, build_adapters(home, accounts), home=home, scenes=SceneStore(folder / "scenes.yaml"))
     hub.accounts = accounts
     hub.integrations = integration_status(home, accounts)
     return hub

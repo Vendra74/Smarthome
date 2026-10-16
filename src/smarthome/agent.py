@@ -17,6 +17,7 @@ import anthropic
 from .accounts import PROVIDERS
 from .hub import Hub
 from .models import Command, DeviceType
+from .scenes import SceneAction
 
 MODEL = os.environ.get("SMARTHOME_MODEL", "claude-opus-5-5")
 MAX_TOOL_ROUNDS = 8
@@ -39,12 +40,18 @@ segurança, Código de usuário) e ler o QR code que a central mostra; LG ThinQ 
 pessoal gerado em connect-pat.lgthinq.com. Aparelhos do Intelbras Izy Smart não podem ser \
 ligados por fora: a pessoa deve pareá-los de novo no app Smart Life e conectar o Smart Life. \
 Nunca peça chaves ou tokens pelo chat.
+- Cenas: "modo filme", "sair de casa", "boa noite" são cenas (list_scenes, run_scene). Para \
+criar uma, monte as ações com create_scene ("cria a cena modo filme: TV da sala no Netflix e luz \
+da sala em 20%") ou, se a pessoa pedir para salvar como está ("salva a sala assim como cena \
+jantar"), use from_devices com os aparelhos do cômodo. Se um pedido parece uma cena que não existe, \
+faça as ações direto e ofereça salvar como cena.
 - Nunca diga que fez algo que uma ferramenta não confirmou.
 
 Suas respostas são faladas em voz alta: uma ou duas frases curtas, sem markdown, \
 sem listas, sem IDs internos."""
 
 _NULLABLE_STR = {"type": ["string", "null"]}
+_PARAM_KEYS = ("level", "celsius", "mode", "speed", "muted", "channel", "app")
 
 TOOLS: list[dict[str, Any]] = [
     {
@@ -116,6 +123,68 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "list_scenes",
+        "description": "Lista as cenas da casa (id, nome, apelidos e ações).",
+        "strict": True,
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "run_scene",
+        "description": "Executa uma cena pelo id.",
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {"scene_id": {"type": "string"}},
+            "required": ["scene_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "create_scene",
+        "description": "Cria uma cena. Informe actions (lista de comandos) ou from_devices (ids cujo estado atual vira a cena); o outro fica vazio.",
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Nome falado, ex.: Modo filme"},
+                "aliases": {"type": "array", "items": {"type": "string"}},
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "device_id": {"type": "string"},
+                            "command": {"type": "string", "enum": [c.value for c in Command]},
+                            "level": {"type": ["integer", "null"]},
+                            "celsius": {"type": ["number", "null"]},
+                            "mode": _NULLABLE_STR,
+                            "speed": _NULLABLE_STR,
+                            "muted": {"type": ["boolean", "null"]},
+                            "channel": _NULLABLE_STR,
+                            "app": _NULLABLE_STR,
+                        },
+                        "required": ["device_id", "command", "level", "celsius", "mode", "speed", "muted", "channel", "app"],
+                        "additionalProperties": False,
+                    },
+                },
+                "from_devices": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["name", "aliases", "actions", "from_devices"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "remove_scene",
+        "description": "Apaga uma cena pelo id.",
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {"scene_id": {"type": "string"}},
+            "required": ["scene_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "remove_device",
         "description": "Remove um dispositivo do cadastro da central (ex.: um exemplo virtual ou um aparelho que saiu de casa). Confirme com o usuário antes se houver dúvida sobre qual é.",
         "strict": True,
@@ -169,11 +238,7 @@ class HomeAgent:
                 )
             return out
         if name == "send_command":
-            params = {
-                k: args[k]
-                for k in ("level", "celsius", "mode", "speed", "muted", "channel", "app")
-                if args.get(k) is not None
-            }
+            params = {k: args[k] for k in _PARAM_KEYS if args.get(k) is not None}
             result = await self.hub.execute(args["device_id"], Command(args["command"]), params)
             return result.model_dump(mode="json")
         if name == "discover_devices":
@@ -193,6 +258,28 @@ class HomeAgent:
                 config=config,
             )
             return {"registered": device.model_dump(mode="json")}
+        if name == "list_scenes":
+            return [s.model_dump(mode="json") for s in self.hub.scenes.all()]
+        if name == "run_scene":
+            return (await self.hub.run_scene(args["scene_id"])).model_dump(mode="json")
+        if name == "create_scene":
+            if args.get("from_devices"):
+                scene = await self.hub.snapshot_scene(args["name"], args["from_devices"], args.get("aliases") or [])
+            else:
+                actions = [
+                    SceneAction(
+                        device_id=a["device_id"],
+                        command=Command(a["command"]),
+                        params={k: a[k] for k in _PARAM_KEYS if a.get(k) is not None},
+                    )
+                    for a in args.get("actions") or []
+                ]
+                scene = self.hub.create_scene(args["name"], actions, args.get("aliases") or [])
+            return {"created": scene.model_dump(mode="json")}
+        if name == "remove_scene":
+            if not self.hub.scenes.remove(args["scene_id"]):
+                raise ValueError(f"Cena {args['scene_id']} não existe")
+            return {"removed": args["scene_id"]}
         if name == "remove_device":
             device = self.hub.registry.get(args["device_id"])
             if device is None:

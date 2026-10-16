@@ -30,6 +30,7 @@
     <p id="reply" class="reply" aria-live="polite"></p>
   </section>
 
+  <nav id="scenes" class="scenes" aria-label="Cenas"></nav>
   <nav id="rooms" class="rooms" aria-label="Cômodos"></nav>
   <main id="devices" class="devices"></main>
   <p id="empty" class="empty" hidden>Nenhum dispositivo cadastrado ainda. Use "Adicionar" ou peça por voz: "configura a luz nova da cozinha".</p>
@@ -72,6 +73,24 @@
         <button type="submit" value="save">Salvar</button>
       </menu>
     </form>
+  </dialog>
+
+  <dialog id="scene-dialog">
+    <form id="scene-form" method="dialog">
+      <h2>Nova cena</h2>
+      <p class="hint">Deixe os aparelhos do jeito que a cena deve ficar, marque quais entram e dê um nome. Depois é só tocar no botão da cena (ou pedir por voz).</p>
+      <label>Nome <input name="name" required placeholder="Modo filme"></label>
+      <div id="scene-devices" class="scene-devices"></div>
+      <p id="scene-error" class="error" hidden></p>
+      <menu>
+        <button type="button" class="ghost" id="scene-cancel">Cancelar</button>
+        <button type="submit" value="save">Salvar cena</button>
+      </menu>
+    </form>
+    <section id="scene-list" class="scene-list" hidden>
+      <h3>Cenas existentes</h3>
+      <div></div>
+    </section>
   </dialog>
 
   <dialog id="accounts-dialog">

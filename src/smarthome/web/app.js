@@ -15,6 +15,7 @@ const $ = (sel) => document.querySelector(sel);
 const state = {
   home: null,
   devices: [],
+  scenes: [],
   room: ALL_ROOMS,
   open: null, // linha com o detalhe aberto por toque (celular)
   sessionId: loadSessionId(),
@@ -45,14 +46,153 @@ async function api(path, options = {}) {
 
 async function load() {
   // Primeiro o cadastro (instantâneo), depois o estado (consulta nuvens e rede, pode demorar).
-  const [home, devices] = await Promise.all([api("/home"), api("/devices")]);
+  const [home, devices, scenes] = await Promise.all([api("/home"), api("/devices"), api("/scenes").catch(() => [])]);
   state.home = home;
   state.devices = devices.map((d) => ({ ...d, state: undefined }));
+  state.scenes = scenes;
   document.title = home.name;
   $("#home-name").textContent = home.name;
+  renderScenes();
   renderRooms();
   renderDevices();
   await refreshStates();
+}
+
+// ---------- Cenas ----------
+
+function renderScenes() {
+  const nav = $("#scenes");
+  nav.replaceChildren();
+  if (!state.devices.length) return;
+  for (const scene of state.scenes) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = scene.name;
+    button.title = scene.actions.map((a) => deviceName(a.device_id)).filter((v, i, arr) => arr.indexOf(v) === i).join(", ");
+    button.addEventListener("click", () => runScene(scene, button));
+    nav.append(button);
+  }
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "new-scene";
+  add.textContent = state.scenes.length ? "+ Cena" : "+ Criar uma cena";
+  add.addEventListener("click", openSceneDialog);
+  nav.append(add);
+}
+
+function deviceName(id) {
+  return state.devices.find((d) => d.id === id)?.name || id;
+}
+
+async function runScene(scene, button) {
+  button.classList.add("busy");
+  button.disabled = true;
+  try {
+    const result = await api(`/scenes/${encodeURIComponent(scene.id)}/run`, { method: "POST" });
+    const failed = result.results.filter((r) => !r.ok);
+    button.classList.add(failed.length ? "fail" : "ok");
+    if (failed.length) {
+      showReply(`${scene.name}: ${failed.map((r) => `${deviceName(r.device_id)}: ${r.message}`).join("; ")}`);
+    }
+    for (const r of result.results) {
+      const device = state.devices.find((d) => d.id === r.device_id);
+      if (device && r.state) device.state = r.state;
+    }
+    renderDevices();
+  } catch (err) {
+    button.classList.add("fail");
+    showReply(err.message);
+  } finally {
+    button.disabled = false;
+    setTimeout(() => button.classList.remove("busy", "ok", "fail"), 1500);
+  }
+}
+
+function openSceneDialog() {
+  const dialog = $("#scene-dialog");
+  const form = $("#scene-form");
+  form.reset();
+  $("#scene-error").hidden = true;
+  const box = $("#scene-devices");
+  box.replaceChildren();
+  for (const room of roomsInUse()) {
+    const title = document.createElement("h4");
+    title.textContent = room;
+    box.append(title);
+    for (const device of state.devices.filter((d) => (d.room || NO_ROOM) === room)) {
+      const label = document.createElement("label");
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.name = "device";
+      check.value = device.id;
+      check.checked = state.room === ALL_ROOMS || state.room === room;
+      const name = document.createElement("span");
+      name.textContent = device.name;
+      const current = document.createElement("span");
+      current.className = "state";
+      current.textContent = statusText(device);
+      label.append(check, name, current);
+      box.append(label);
+    }
+  }
+  const list = $("#scene-list");
+  list.hidden = !state.scenes.length;
+  const inner = list.querySelector("div");
+  inner.replaceChildren();
+  for (const scene of state.scenes) {
+    const row = document.createElement("div");
+    row.className = "account";
+    const info = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "name";
+    title.textContent = scene.name;
+    const detail = document.createElement("p");
+    detail.className = "detail";
+    detail.textContent = `${scene.actions.length} ${scene.actions.length === 1 ? "ação" : "ações"}`;
+    info.append(title, detail);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ghost";
+    remove.textContent = "Remover";
+    remove.addEventListener("click", async () => {
+      if (!confirm(`Remover a cena ${scene.name}?`)) return;
+      try {
+        await api(`/scenes/${encodeURIComponent(scene.id)}`, { method: "DELETE" });
+        state.scenes = state.scenes.filter((s) => s.id !== scene.id);
+        renderScenes();
+        openSceneDialog();
+      } catch (err) { alert(err.message); }
+    });
+    row.append(info, remove);
+    inner.append(row);
+  }
+  dialog.showModal();
+}
+
+function setupSceneDialog() {
+  const dialog = $("#scene-dialog");
+  const form = $("#scene-form");
+  $("#scene-cancel").addEventListener("click", () => dialog.close());
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const chosen = [...form.querySelectorAll("input[name=device]:checked")].map((c) => c.value);
+    const error = $("#scene-error");
+    if (!chosen.length) {
+      error.textContent = "Marque pelo menos um aparelho.";
+      error.hidden = false;
+      return;
+    }
+    try {
+      const scene = await api("/scenes", { method: "POST", body: { name: form.name.value.trim(), from_devices: chosen } });
+      state.scenes.push(scene);
+      renderScenes();
+      dialog.close();
+      showReply(`Cena "${scene.name}" salva com o estado atual de ${chosen.length} ${chosen.length === 1 ? "aparelho" : "aparelhos"}.`);
+    } catch (err) {
+      error.textContent = err.message;
+      error.hidden = false;
+    }
+  });
 }
 
 function roomsInUse() {
@@ -657,6 +797,7 @@ document.addEventListener("click", (e) => {
 
 setupAddDialog();
 setupAccountsDialog();
+setupSceneDialog();
 load().catch((error) => showReply(`Não consegui carregar a casa: ${error.message}`));
 setInterval(refreshStates, 15000);
 document.addEventListener("visibilitychange", refreshStates);

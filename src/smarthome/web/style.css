@@ -91,6 +91,23 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .reply:empty { display: none; }
 .reply.thinking::after { content: "…"; }
 
+/* Cenas: botões logo abaixo do assistente; "+" abre a criação */
+.scenes { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 0 0; }
+.scenes:empty { display: none; }
+.scenes button { background: var(--surface); color: var(--text); border: 1px solid var(--border); font-weight: 500; padding: 8px 14px; }
+.scenes button.busy { opacity: .6; }
+.scenes button.ok { border-color: #3a9a5b; }
+.scenes button.fail { border-color: var(--danger); }
+.scenes button.new-scene { color: var(--muted); border-style: dashed; }
+.scene-devices { display: grid; gap: 4px; margin: 4px 0 10px; max-height: 40vh; overflow: auto; }
+.scene-devices h4 { margin: 8px 0 2px; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.scene-devices label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .95rem; color: var(--text); }
+.scene-devices label span.state { margin-left: auto; font-size: .8rem; color: var(--muted); }
+.scene-list { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.scene-list h3 { margin: 0 0 6px; font-size: .95rem; }
+.scene-list .account { padding: 6px 0; }
+.scene-list[hidden] { display: none; }
+
 .rooms {
   display: flex;
   gap: 8px;

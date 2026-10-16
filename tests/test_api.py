@@ -148,3 +148,22 @@ def test_smartthings_oauth_callback(hub, tmp_path, monkeypatch):
         assert "erro=recusado" in r.headers["location"]
         r = client.get("/auth/smartthings/callback", params={"error": "access_denied"}, follow_redirects=False)
         assert "erro=access_denied" in r.headers["location"]
+
+
+def test_scenes_api(hub):
+    with TestClient(create_app(hub=hub)) as client:
+        assert client.get("/scenes").json() == []
+        r = client.post("/scenes", json={"name": "Modo filme", "actions": [
+            {"device_id": "luz-sala", "command": "set_brightness", "params": {"level": 20}}
+        ]})
+        assert r.status_code == 201 and r.json()["id"] == "modo-filme"
+        r = client.post("/scenes/modo-filme/run")
+        assert r.json()["ok"] and r.json()["results"][0]["state"]["attributes"]["brightness"] == 20
+        # salvar o estado atual
+        r = client.post("/scenes", json={"name": "Agora", "from_devices": ["luz-sala"]})
+        assert r.status_code == 201 and r.json()["actions"][-1]["params"] == {"level": 20}
+        assert client.post("/scenes", json={"name": "Vazia"}).status_code == 400
+        assert client.post("/scenes/nada/run").status_code == 404
+        assert client.delete("/scenes/modo-filme").status_code == 204
+        assert client.delete("/scenes/modo-filme").status_code == 404
+        assert [s["id"] for s in client.get("/scenes").json()] == ["agora"]
