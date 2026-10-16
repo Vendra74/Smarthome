@@ -177,7 +177,7 @@ def test_tv_finding_tells_what_the_scan_saw(hub, monkeypatch):
     hub.recovery._scan = lambda: asyncio.sleep(0, result=[])
     report = run(diagnose(hub, fresh=True))
     finding = next(f for f in report.findings if f.code == "tv_unknown_lan")
-    assert "não achou nenhuma TV" in finding.detail and "outro Wi-Fi" in finding.detail
+    assert "não achou nenhuma TV" in finding.detail and "mesmo Wi-Fi" in finding.detail
 
     stranger = {"host": "10.0.0.40", "name": "[TV] Samsung 7 Series (50)", "model": "", "mac": "AA", "power": True}
     hub.recovery._scan = lambda: asyncio.sleep(0, result=[stranger])

@@ -118,13 +118,15 @@ liberado em *Ajustes do Sistema > Privacidade e Segurança > Rede local*
 busca dá "No route to host"; a central percebe e avisa no app e no log.
 
 Casa com dois roteadores (modem da operadora e um mesh em modo roteador): a
-busca só enxerga a rede em que a central está. Se uma TV ligada continua "fora
-da nuvem e a central ainda não a viu", o diagnóstico diz o que a última busca
-encontrou. Para ver na hora, rode `python -m smarthome.tools.tv_scan` (aceita
-outra rede como argumento, ex. `192.168.0.0/24`). Se a TV está no outro Wi-Fi,
-o certo é pôr TV e central no mesmo; enquanto isso, `TV_SCAN_NETWORKS` no
-`.env` manda a central varrer também essa rede (o acordar por rede, porém, não
-atravessa roteadores).
+central descobre sozinha as outras redes da casa (pelos saltos até a internet
+e pelos endereços de fábrica dos roteadores) e procura TVs nelas também, sem
+configuração. Uma TV no Wi-Fi do outro roteador é controlada normalmente
+quando ligada; para acordá-la desligada a central manda o pacote para o IP
+dela, o que nem sempre atravessa o roteador. O diagnóstico e o botão *Rede*
+dizem em que rede cada TV está e o que resolve de vez (mesmo Wi-Fi, ou
+"Ligar com dispositivo móvel" na TV). Para ver na hora, rode
+`python -m smarthome.tools.tv_scan`; `TV_SCAN_NETWORKS` no `.env` acrescenta
+redes que a descoberta não achou.
 
 ## Contas: entrar com a conta, sem chave nem token
 

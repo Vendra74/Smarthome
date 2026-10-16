@@ -71,6 +71,11 @@ def _group(findings: list[Finding], code: str, title, detail: str, action: str) 
     return rest + [merged]
 
 
+def _neighbors_cached() -> list:
+    cached = samsung_lan._neighbors
+    return list(cached[1]) if cached else []
+
+
 def _scan_summary(hub: Hub, central_net: ipaddress.IPv4Network | None) -> str:
     """O que a última busca de TVs na rede encontrou e o que isso sugere."""
     scan = hub.recovery.last_scan()
@@ -80,13 +85,12 @@ def _scan_summary(hub: Hub, central_net: ipaddress.IPv4Network | None) -> str:
     when = "agora há pouco" if age < 90 else f"há {int(age // 60)} min"
     if not tvs:
         where = f" (a central está em {central_net})" if central_net else ""
-        extra = samsung_lan.extra_networks()
+        others = [str(n) for n in (_neighbors_cached() + samsung_lan.extra_networks())]
         text = f"Na última busca ({when}) a central não achou nenhuma TV Samsung na rede{where}."
-        if extra:
-            text += " Nem nas redes extras " + ", ".join(str(n) for n in extra) + "."
-        return text + (" Se alguma TV está ligada e mesmo assim não aparece, ela deve estar no outro Wi-Fi da casa "
-                       "(o do modem): confira o nome da rede em Ajustes > Rede na TV e ponha TV e central no mesmo Wi-Fi, "
-                       "ou avise a central da outra rede com TV_SCAN_NETWORKS no .env.")
+        if others:
+            text += " Nem nas outras redes da casa (" + ", ".join(dict.fromkeys(others)) + ")."
+        return text + (" Se alguma TV está ligada e mesmo assim não aparece, confira em Ajustes > Rede na TV se ela "
+                       "está no Wi-Fi e qual; o ideal é TV e central no mesmo Wi-Fi.")
     seen = "; ".join(f"{t['name'] or t['model'] or '?'} ({t['host']})" for t in tvs)
     text = f"Na última busca ({when}) a central viu: {seen}."
     unmatched = hub.recovery.unmatched(hub)
@@ -147,10 +151,12 @@ async def diagnose(hub: Hub, fresh: bool = False) -> HealthReport:
             try:
                 if ipaddress.ip_address(host) not in central_net:
                     findings.append(Finding(
-                        level="warning", code="other_subnet", device_id=d.id,
-                        title=f"{d.name} está em outra rede ({host})",
-                        detail=f"A central está em {central_net}; o pacote de acordar e o controle direto não atravessam redes.",
-                        action="Ligue a central e o aparelho no mesmo roteador, ou ponha o segundo roteador em modo ponto de acesso.",
+                        level="info", code="other_subnet", device_id=d.id,
+                        title=f"{d.name} está no Wi-Fi do outro roteador ({host})",
+                        detail=(f"A central está na rede {central_net}. Com o aparelho ligado tudo funciona; desligado, "
+                                "a central tenta acordá-lo pelo IP, mas o pacote nem sempre atravessa o roteador."),
+                        action=("Para ligar sempre funcionar: conecte o aparelho no mesmo Wi-Fi da central, ou, numa TV Samsung, "
+                                "ative 'Ligar com dispositivo móvel' para ela ficar na nuvem mesmo em espera."),
                     ))
             except ValueError:
                 pass

@@ -111,6 +111,7 @@ function renderNetwork(view) {
   const summary = $("#network-summary");
   summary.textContent = view.central_ip
     ? `A central está em ${view.central_ip} (rede ${view.central_network})` +
+      (view.neighbor_networks.length ? `; descobriu outras redes na casa: ${view.neighbor_networks.join(", ")}` : "") +
       (view.extra_networks.length ? `; também procura em ${view.extra_networks.join(", ")}` : "") + "."
     : "A central não descobriu a própria rede (sem conexão?).";
   const list = $("#network-list");

@@ -46,7 +46,8 @@ class SeenTV(BaseModel):
 class NetworkView(BaseModel):
     central_ip: str | None = None
     central_network: str | None = None
-    extra_networks: list[str] = Field(default_factory=list)
+    neighbor_networks: list[str] = Field(default_factory=list)  # descobertas sozinhas
+    extra_networks: list[str] = Field(default_factory=list)  # configuradas (TV_SCAN_NETWORKS)
     scan_age_s: float | None = None  # None = ainda não houve busca
     devices: list[DeviceNetwork] = Field(default_factory=list)
     seen_tvs: list[SeenTV] = Field(default_factory=list)
@@ -82,7 +83,8 @@ async def network_view(hub: Hub, fresh: bool = False) -> NetworkView:
             how = "Visto pela central na rede local." if d.adapter == "smartthings" else "Falamos direto com ele na rede local."
         else:
             where = "other"
-            how = "Está em outra rede: a central não alcança nem acorda este aparelho por aqui."
+            how = ("Está no Wi-Fi do outro roteador. Ligado, a central controla normalmente; desligado, "
+                   "ela tenta acordá-lo pelo IP, o que nem sempre atravessa o roteador.")
         devices.append(DeviceNetwork(id=d.id, name=d.name, room=d.room, adapter=d.adapter, host=host, mac=mac,
                                      network=str(net) if net else None, where=where, how=how))
 
@@ -98,6 +100,7 @@ async def network_view(hub: Hub, fresh: bool = False) -> NetworkView:
 
     return NetworkView(
         central_ip=central_ip, central_network=str(central_net) if central_net else None,
+        neighbor_networks=[str(n) for n in await samsung_lan.neighbor_networks()],
         extra_networks=[str(n) for n in samsung_lan.extra_networks()],
         scan_age_s=scan[0] if scan else None, devices=devices, seen_tvs=seen,
     )

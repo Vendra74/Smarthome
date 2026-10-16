@@ -328,3 +328,25 @@ def test_tv_online_in_the_cloud_is_learned_right_away(tmp_path):
 
     config = asyncio.run(flow())
     assert config["host"] == "10.0.0.10" and config["mac"] == "AA:BB:CC:DD:EE:01"
+
+
+def test_neighbor_networks_come_from_traceroute_and_gateway_probes(monkeypatch):
+    """Casa com dois roteadores: a rede do modem é descoberta sem configuração."""
+    import ipaddress
+
+    from smarthome.adapters import samsung_lan
+
+    async def hops():
+        return ["10.0.0.1", "192.168.0.1", "177.1.2.3"]
+
+    async def answers(ip, timeout=0.7):
+        return ip == "192.168.15.1"
+
+    monkeypatch.setattr(samsung_lan, "_neighbors", None)
+    monkeypatch.setattr(samsung_lan, "_traceroute_hops", hops)
+    monkeypatch.setattr(samsung_lan, "_gateway_answers", answers)
+    monkeypatch.setattr(samsung_lan, "local_network", lambda: ipaddress.ip_network("10.0.0.0/24"))
+    found = asyncio.run(samsung_lan.neighbor_networks(force=True))
+    assert [str(n) for n in found] == ["192.168.0.0/24", "192.168.15.0/24"]
+    nets = asyncio.run(samsung_lan.scan_networks())
+    assert [str(n) for n in nets] == ["10.0.0.0/24", "192.168.0.0/24", "192.168.15.0/24"]

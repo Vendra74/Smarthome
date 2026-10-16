@@ -159,17 +159,102 @@ def extra_networks() -> list[ipaddress.IPv4Network]:
     return networks
 
 
+# Redes vizinhas descobertas sozinhas (casa com modem + roteador mesh em modo roteador):
+# a central está na rede do segundo roteador e as TVs podem estar na do modem.
+_neighbors: tuple[float, list[ipaddress.IPv4Network]] | None = None
+NEIGHBOR_TTL = 600.0
+MAX_NEIGHBORS = 3  # cada rede a mais custa uns segundos por varredura
+COMMON_GATEWAYS = ["192.168.0.1", "192.168.1.1", "192.168.15.1", "192.168.100.1", "10.0.0.1",
+                   "10.1.1.1", "192.168.2.1", "192.168.3.1", "192.168.88.1", "192.168.10.1", "172.16.0.1"]
+
+
+def _private(ip: str) -> ipaddress.IPv4Address | None:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return None
+    return addr if addr.version == 4 and addr.is_private else None
+
+
+async def _traceroute_hops() -> list[str]:
+    """IPs dos primeiros saltos até a internet: o segundo costuma ser o modem (a outra rede)."""
+    for cmd in (["traceroute", "-n", "-m", "3", "-q", "1", "-w", "1", "8.8.8.8"],
+                ["tracepath", "-n", "-m", "3", "8.8.8.8"]):
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=8)
+        except (OSError, asyncio.TimeoutError):
+            continue
+        hops = re.findall(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b", out.decode(errors="ignore"))
+        return [h for h in hops if h != "8.8.8.8"]
+    return []
+
+
+async def _gateway_answers(ip: str, timeout: float = 0.7) -> bool:
+    """Há um roteador neste IP? Exige que ele responda algo na porta 80 (a página de admin)."""
+    try:
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, 80), timeout)
+    except (OSError, asyncio.TimeoutError):
+        return False
+    try:
+        writer.write(b"HEAD / HTTP/1.0\r\nHost: " + ip.encode() + b"\r\n\r\n")
+        await writer.drain()
+        data = await asyncio.wait_for(reader.read(64), timeout)
+        return bool(data)
+    except (OSError, asyncio.TimeoutError):
+        return False
+    finally:
+        writer.close()
+
+
+async def neighbor_networks(force: bool = False) -> list[ipaddress.IPv4Network]:
+    """Outras redes privadas da casa, descobertas sem configuração: pelos saltos até a internet
+    e por roteadores que respondem nos endereços de fábrica mais comuns. Resultado vale 10 min."""
+    global _neighbors
+    import time as _time
+    if _neighbors and not force and _time.monotonic() - _neighbors[0] < NEIGHBOR_TTL:
+        return _neighbors[1]
+    local = local_network()
+    found: dict[str, ipaddress.IPv4Network] = {}
+    for hop in await _traceroute_hops():
+        if (addr := _private(hop)) is not None:
+            net = ipaddress.ip_network(f"{addr}/24", strict=False)
+            if net != local:
+                found[str(net)] = net
+    candidates = [g for g in COMMON_GATEWAYS
+                  if (n := ipaddress.ip_network(f"{g}/24", strict=False)) != local and str(n) not in found]
+    answers = await asyncio.gather(*(_gateway_answers(g) for g in candidates))
+    for gateway, ok in zip(candidates, answers):
+        if ok:
+            net = ipaddress.ip_network(f"{gateway}/24", strict=False)
+            found[str(net)] = net
+    networks = list(found.values())[:MAX_NEIGHBORS]
+    if networks:
+        log.info("Outras redes da casa: %s", ", ".join(str(n) for n in networks))
+    _neighbors = (_time.monotonic(), networks)
+    return networks
+
+
+async def scan_networks() -> list[ipaddress.IPv4Network]:
+    """Todas as redes a varrer: a da central, as vizinhas descobertas e as configuradas."""
+    nets: dict[str, ipaddress.IPv4Network] = {}
+    for n in [local_network()] + await neighbor_networks() + extra_networks():
+        if n is not None:
+            nets.setdefault(str(n), n)
+    return list(nets.values())
+
+
 async def find_samsung_tvs(timeout: float = 3.0) -> list[dict[str, Any]]:
     """TVs Samsung ligadas (ou em standby com rede ativa) na rede local.
 
-    Junta o que o SSDP anuncia com uma varredura IP a IP da rede da central e das redes
-    extras configuradas: TV que não responde multicast (ou está no outro roteador) ainda
+    Junta o que o SSDP anuncia com uma varredura IP a IP da rede da central, das redes
+    vizinhas descobertas sozinhas e das configuradas: TV que não responde multicast (ou está no outro roteador) ainda
     aparece."""
     hosts = await asyncio.to_thread(_ssdp_hosts, timeout)
     infos = await asyncio.gather(*(tv_info(h) for h in sorted(hosts)))
     found = {i["host"]: i for i in infos if i}
-    networks = [n for n in [local_network()] if n is not None] + extra_networks()
-    for network in networks:
+    for network in await scan_networks():
         log.debug("Varrendo %s", network)
         for tv in await sweep_samsung_tvs(network):
             found.setdefault(tv["host"], tv)

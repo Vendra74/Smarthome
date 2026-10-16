@@ -27,9 +27,12 @@ async def main(networks: list[str]) -> None:
     if networks:
         os.environ["TV_SCAN_NETWORKS"] = ",".join(networks)
     print(f"Rede da central: {samsung_lan.local_network() or 'desconhecida'}")
+    neighbors = await samsung_lan.neighbor_networks(force=True)
+    if neighbors:
+        print("Outras redes descobertas na casa: " + ", ".join(str(n) for n in neighbors))
     extra = samsung_lan.extra_networks()
     if extra:
-        print("Redes extras: " + ", ".join(str(n) for n in extra))
+        print("Redes extras configuradas: " + ", ".join(str(n) for n in extra))
     print("Procurando TVs Samsung (leva uns segundos)...\n")
     tvs = await samsung_lan.find_samsung_tvs()
     if not tvs:
