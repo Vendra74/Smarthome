@@ -113,6 +113,18 @@ class LGThinQAdapter(Adapter):
         if device.type != DeviceType.AC:
             raise AdapterError(f"Comandos para {device.name} pelo LG ThinQ ainda não são suportados")
         ac = await self._ac(device)
+        try:
+            return await self._execute_ac(device, ac, command, params)
+        except AdapterError as exc:
+            if "COMMAND_NOT_SUPPORTED_IN_POWER_OFF" not in str(exc):
+                raise
+            # A LG recusa qualquer comando com o ar desligado, inclusive "desligar".
+            # Se era desligar, está feito; se não, a pessoa precisa ligar antes.
+            if command == Command.TURN_OFF:
+                return await self._refresh(device, ac)
+            raise AdapterError(f"{device.name} está desligado; ligue-o antes de mudar temperatura ou modo") from exc
+
+    async def _execute_ac(self, device: Device, ac: Any, command: Command, params: dict[str, Any]) -> DeviceState:
         if command == Command.TURN_ON:
             await self._call(ac.set_air_con_operation_mode("POWER_ON"))
         elif command == Command.TURN_OFF:

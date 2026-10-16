@@ -97,3 +97,24 @@ def test_non_ac_commands_are_refused_clearly():
     washer = Device(id="lav", name="Lavadora", type=DeviceType.SENSOR, adapter="lg_thinq", config={"device_id": "w1"})
     with pytest.raises(AdapterError, match="ainda não são suportados"):
         asyncio.run(adapter.execute(washer, Command.TURN_ON, {}))
+
+
+def test_turning_off_an_ac_already_off_is_a_success():
+    import asyncio
+
+    import pytest
+
+    from smarthome.adapters.base import AdapterError
+
+    adapter, ac, device = make()
+    ac.api.status["power"] = "POWER_OFF"
+
+    async def refuse(value):
+        raise Exception("ThinQAPIException: COMMAND_NOT_SUPPORTED_IN_POWER_OFF (2304) - Command not supported in POWER OFF")
+
+    ac.set_air_con_operation_mode = refuse
+    ac.set_cool_target_temperature_c = refuse
+    state = asyncio.run(adapter.execute(device, Command.TURN_OFF, {}))
+    assert state.power is False
+    with pytest.raises(AdapterError, match="ligue-o antes"):
+        asyncio.run(adapter.execute(device, Command.SET_TEMPERATURE, {"celsius": 22}))
