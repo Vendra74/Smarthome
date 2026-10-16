@@ -16,6 +16,7 @@ const state = {
   home: null,
   devices: [],
   scenes: [],
+  routines: [],
   room: ALL_ROOMS,
   open: null, // linha com o detalhe aberto por toque (celular)
   sessionId: loadSessionId(),
@@ -46,7 +47,10 @@ async function api(path, options = {}) {
 
 async function load() {
   // Primeiro o cadastro (instantâneo), depois o estado (consulta nuvens e rede, pode demorar).
-  const [home, devices, scenes] = await Promise.all([api("/home"), api("/devices"), api("/scenes").catch(() => [])]);
+  const [home, devices, scenes, routines] = await Promise.all([
+    api("/home"), api("/devices"), api("/scenes").catch(() => []), api("/routines").catch(() => []),
+  ]);
+  state.routines = routines;
   state.home = home;
   state.devices = devices.map((d) => ({ ...d, state: undefined }));
   state.scenes = scenes;
@@ -166,7 +170,95 @@ function openSceneDialog() {
     row.append(info, remove);
     inner.append(row);
   }
+  renderRoutines();
   dialog.showModal();
+}
+
+const DAY_LABEL = { seg: "seg", ter: "ter", qua: "qua", qui: "qui", sex: "sex", sab: "sáb", dom: "dom" };
+
+function routineText(routine) {
+  const scene = state.scenes.find((s) => s.id === routine.scene_id)?.name || routine.scene_id;
+  const t = routine.trigger;
+  if (t.type === "time") {
+    const days = t.days.length ? t.days.map((d) => DAY_LABEL[d] || d).join(", ") : "todos os dias";
+    return `${days} às ${t.at} · ${scene}`;
+  }
+  const what = t.attribute === "power" ? (t.equals ? "ligar" : "desligar") : `${t.attribute} = ${t.equals}`;
+  return `quando ${deviceName(t.device_id)} ${what} · ${scene}`;
+}
+
+function renderRoutines() {
+  const section = $("#routine-section");
+  section.hidden = !state.scenes.length;
+  const list = $("#routine-list");
+  list.replaceChildren();
+  for (const routine of state.routines) {
+    const row = document.createElement("div");
+    row.className = "account";
+    const info = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "name";
+    title.textContent = routine.name;
+    const detail = document.createElement("p");
+    detail.className = routine.enabled ? "detail" : "detail off";
+    detail.textContent = routineText(routine);
+    info.append(title, detail);
+    const actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.gap = "6px";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "ghost";
+    toggle.textContent = routine.enabled ? "Pausar" : "Ligar";
+    toggle.addEventListener("click", async () => {
+      try {
+        const updated = await api(`/routines/${encodeURIComponent(routine.id)}`, { method: "PATCH", body: { enabled: !routine.enabled } });
+        state.routines = state.routines.map((r) => (r.id === updated.id ? updated : r));
+        renderRoutines();
+      } catch (err) { alert(err.message); }
+    });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ghost";
+    remove.textContent = "Remover";
+    remove.addEventListener("click", async () => {
+      if (!confirm(`Remover a rotina ${routine.name}?`)) return;
+      try {
+        await api(`/routines/${encodeURIComponent(routine.id)}`, { method: "DELETE" });
+        state.routines = state.routines.filter((r) => r.id !== routine.id);
+        renderRoutines();
+      } catch (err) { alert(err.message); }
+    });
+    actions.append(toggle, remove);
+    row.append(info, actions);
+    list.append(row);
+  }
+  const select = $("#routine-form").scene_id;
+  select.replaceChildren(...state.scenes.map((s) => Object.assign(document.createElement("option"), { value: s.id, textContent: s.name })));
+}
+
+function setupRoutineForm() {
+  const form = $("#routine-form");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const error = $("#routine-error");
+    error.hidden = true;
+    const days = [...form.querySelectorAll("input[name=day]:checked")].map((c) => c.value);
+    const sceneName = form.scene_id.selectedOptions[0]?.textContent || "cena";
+    try {
+      const routine = await api("/routines", {
+        method: "POST",
+        body: { name: `${sceneName} às ${form.at.value}`, scene_id: form.scene_id.value, trigger: { type: "time", at: form.at.value, days } },
+      });
+      state.routines.push(routine);
+      form.at.value = "";
+      form.querySelectorAll("input[name=day]").forEach((c) => (c.checked = false));
+      renderRoutines();
+    } catch (err) {
+      error.textContent = err.message;
+      error.hidden = false;
+    }
+  });
 }
 
 function setupSceneDialog() {
@@ -798,6 +890,7 @@ document.addEventListener("click", (e) => {
 setupAddDialog();
 setupAccountsDialog();
 setupSceneDialog();
+setupRoutineForm();
 load().catch((error) => showReply(`Não consegui carregar a casa: ${error.message}`));
 setInterval(refreshStates, 15000);
 document.addEventListener("visibilitychange", refreshStates);

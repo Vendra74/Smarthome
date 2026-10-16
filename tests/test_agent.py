@@ -129,3 +129,22 @@ def test_creates_and_runs_scene_by_conversation(hub):
     assert reply == "Criei e ativei o modo filme."
     assert hub.scenes.get("modo-filme").aliases == ["cinema"]
     assert asyncio.run(hub.get_state("luz-sala")).attributes["brightness"] == 20
+
+
+def test_creates_routine_by_conversation(hub):
+    from smarthome.models import Command
+    from smarthome.scenes import SceneAction
+
+    hub.create_scene("Boa noite", [SceneAction(device_id="luz-sala", command=Command.TURN_OFF)])
+    client = FakeClient(
+        [
+            SimpleNamespace(stop_reason="tool_use", content=[tool_use("t1", "create_routine", {
+                "name": "Boa noite às 22h", "scene_id": "boa-noite", "at": "22:00", "days": [],
+                "device_id": None, "attribute": None, "equals": None,
+            })]),
+            SimpleNamespace(stop_reason="end_turn", content=[text("Agendado: todo dia às 22h, boa noite.")]),
+        ]
+    )
+    reply = asyncio.run(HomeAgent(hub, client=client).handle("todo dia às 22h roda a cena boa noite"))
+    assert reply.startswith("Agendado")
+    assert hub.routines.get("boa-noite-as-22h").trigger.at == "22:00"

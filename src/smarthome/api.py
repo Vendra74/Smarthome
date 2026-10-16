@@ -19,6 +19,7 @@ from .agent import HomeAgent
 from .config import account_adapter, build_hub, integration_status
 from .hub import Hub
 from .models import CommandRequest, CommandResult, Device, DeviceState, DeviceType, DiscoveredDevice
+from .routines import Routine, StateTrigger, TimeTrigger
 from .scenes import Scene, SceneAction, SceneResult
 
 
@@ -38,6 +39,16 @@ class NewScene(BaseModel):
     aliases: list[str] = []
     actions: list[SceneAction] = []
     from_devices: list[str] = []  # ids cujo estado atual vira a cena
+
+
+class NewRoutine(BaseModel):
+    name: str
+    trigger: TimeTrigger | StateTrigger
+    scene_id: str
+
+
+class RoutinePatch(BaseModel):
+    enabled: bool
 
 
 class AgentRequest(BaseModel):
@@ -113,8 +124,10 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
         app.state.agent = agent
         # Aprende IP e MAC das TVs ligadas agora e de tempos em tempos, para acordá-las depois.
         learner = app.state.hub.recovery.start_background(app.state.hub)
+        clock = app.state.hub.routine_runner.start_background(app.state.hub)
         yield
         learner.cancel()
+        clock.cancel()
 
     app = FastAPI(title="Central da Casa", version="0.1.0", lifespan=lifespan)
     app.state.oauth = None
@@ -220,6 +233,29 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
         if _hub().scenes.get(scene_id) is None:
             raise HTTPException(404, "Cena não encontrada")
         return await _hub().run_scene(scene_id)
+
+    @app.get("/routines", response_model=list[Routine])
+    async def list_routines() -> list[Routine]:
+        return _hub().routines.all()
+
+    @app.post("/routines", response_model=Routine, status_code=201)
+    async def add_routine(body: NewRoutine) -> Routine:
+        try:
+            return _hub().create_routine(body.name, body.trigger, body.scene_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.patch("/routines/{routine_id}", response_model=Routine)
+    async def patch_routine(routine_id: str, body: RoutinePatch) -> Routine:
+        routine = _hub().routines.get(routine_id)
+        if routine is None:
+            raise HTTPException(404, "Rotina não encontrada")
+        return _hub().routines.update(routine.model_copy(update={"enabled": body.enabled}))
+
+    @app.delete("/routines/{routine_id}", status_code=204)
+    async def remove_routine(routine_id: str) -> None:
+        if not _hub().routines.remove(routine_id):
+            raise HTTPException(404, "Rotina não encontrada")
 
     @app.get("/integrations", response_model=list[Integration])
     async def integrations() -> list[Integration]:

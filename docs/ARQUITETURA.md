@@ -36,6 +36,7 @@ fabricante novo basta escrever um adaptador.
 | Contas | `src/smarthome/accounts.py` | Contas de fabricante ligadas pelo usuário (OAuth, QR, token), guardadas na pasta da casa |
 | Cadastro | `src/smarthome/registry.py` | Lista de dispositivos com cômodo e apelidos, salva em YAML |
 | Cenas | `src/smarthome/scenes.py` | Cena = nome falado + lista de ações (aparelho, comando, parâmetros); o Hub executa, aparelhos em paralelo e ações do mesmo aparelho em ordem |
+| Rotinas | `src/smarthome/routines.py` | Gatilho (horário com dias, ou estado de um aparelho com detecção de borda) que dispara uma cena; relógio em segundo plano a cada 30 s |
 | Hub | `src/smarthome/hub.py` | Valida e despacha comandos, descobre e cadastra dispositivos |
 | Adaptadores | `src/smarthome/adapters/` | SmartThings, LG ThinQ, TV Samsung, TV LG, virtual |
 | Agente | `src/smarthome/agent.py` | Entende pedidos em português e usa o Hub via ferramentas |
@@ -158,7 +159,7 @@ o app Alexa de fato, isso exigiria automação de navegador e fica para avaliar.
    celular) com voz no navegador. Depois, o satélite de voz sempre ouvindo.
 3. **Fase 3:** Smart Home Skill da Alexa e acesso externo seguro.
 4. **Fase 4:** cenas ("modo cinema", "boa noite": feitas, no app e por voz, inclusive
-   "salvar como está"), rotinas por horário/evento, mais adaptadores.
+   "salvar como está") e rotinas por horário/evento (feitas); mais adaptadores.
 
 ## Configuração zero para o usuário final
 

@@ -17,6 +17,7 @@ import anthropic
 from .accounts import PROVIDERS
 from .hub import Hub
 from .models import Command, DeviceType
+from .routines import StateTrigger, TimeTrigger
 from .scenes import SceneAction
 
 MODEL = os.environ.get("SMARTHOME_MODEL", "claude-opus-5-5")
@@ -45,6 +46,9 @@ criar uma, monte as ações com create_scene ("cria a cena modo filme: TV da sal
 da sala em 20%") ou, se a pessoa pedir para salvar como está ("salva a sala assim como cena \
 jantar"), use from_devices com os aparelhos do cômodo. Se um pedido parece uma cena que não existe, \
 faça as ações direto e ofereça salvar como cena.
+- Rotinas disparam uma cena sozinhas: por horário ("todo dia às 22h, boa noite"; dias seg..dom) ou \
+quando um aparelho muda de estado ("quando a TV da sala ligar, modo filme"). Use create_routine; se a \
+cena ainda não existe, crie a cena antes. Horários são da casa (hora local).
 - Nunca diga que fez algo que uma ferramenta não confirmou.
 
 Suas respostas são faladas em voz alta: uma ou duas frases curtas, sem markdown, \
@@ -174,6 +178,53 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "list_routines",
+        "description": "Lista as rotinas (id, nome, gatilho, cena, ligada ou não).",
+        "strict": True,
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "create_routine",
+        "description": "Cria uma rotina que dispara uma cena. Gatilho de horário: at (HH:MM) e days (seg..dom, vazio = todos). Gatilho de estado: device_id, attribute (power ou app...) e equals (valor que dispara). Preencha só um tipo; o outro fica null/vazio.",
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Nome, ex.: Boa noite às 22h"},
+                "scene_id": {"type": "string"},
+                "at": {**_NULLABLE_STR, "description": "HH:MM, hora local"},
+                "days": {"type": "array", "items": {"type": "string", "enum": ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]}},
+                "device_id": _NULLABLE_STR,
+                "attribute": {**_NULLABLE_STR, "description": "power (padrão) ou atributo, ex.: app"},
+                "equals": {"type": ["boolean", "string", "number", "null"], "description": "Valor que dispara; padrão true (ligou)"},
+            },
+            "required": ["name", "scene_id", "at", "days", "device_id", "attribute", "equals"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "set_routine_enabled",
+        "description": "Liga ou desliga uma rotina sem apagar.",
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {"routine_id": {"type": "string"}, "enabled": {"type": "boolean"}},
+            "required": ["routine_id", "enabled"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "remove_routine",
+        "description": "Apaga uma rotina pelo id.",
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {"routine_id": {"type": "string"}},
+            "required": ["routine_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "remove_scene",
         "description": "Apaga uma cena pelo id.",
         "strict": True,
@@ -276,6 +327,30 @@ class HomeAgent:
                 ]
                 scene = self.hub.create_scene(args["name"], actions, args.get("aliases") or [])
             return {"created": scene.model_dump(mode="json")}
+        if name == "list_routines":
+            return [r.model_dump(mode="json") for r in self.hub.routines.all()]
+        if name == "create_routine":
+            if args.get("at"):
+                trigger: TimeTrigger | StateTrigger = TimeTrigger(at=args["at"], days=args.get("days") or [])
+            elif args.get("device_id"):
+                trigger = StateTrigger(
+                    device_id=args["device_id"],
+                    attribute=args.get("attribute") or "power",
+                    equals=True if args.get("equals") is None else args["equals"],
+                )
+            else:
+                raise ValueError("Informe um horário (at) ou um aparelho (device_id) como gatilho")
+            routine = self.hub.create_routine(args["name"], trigger, args["scene_id"])
+            return {"created": routine.model_dump(mode="json")}
+        if name == "set_routine_enabled":
+            routine = self.hub.routines.get(args["routine_id"])
+            if routine is None:
+                raise ValueError(f"Rotina {args['routine_id']} não existe")
+            return self.hub.routines.update(routine.model_copy(update={"enabled": args["enabled"]})).model_dump(mode="json")
+        if name == "remove_routine":
+            if not self.hub.routines.remove(args["routine_id"]):
+                raise ValueError(f"Rotina {args['routine_id']} não existe")
+            return {"removed": args["routine_id"]}
         if name == "remove_scene":
             if not self.hub.scenes.remove(args["scene_id"]):
                 raise ValueError(f"Cena {args['scene_id']} não existe")

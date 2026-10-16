@@ -167,3 +167,17 @@ def test_scenes_api(hub):
         assert client.delete("/scenes/modo-filme").status_code == 204
         assert client.delete("/scenes/modo-filme").status_code == 404
         assert [s["id"] for s in client.get("/scenes").json()] == ["agora"]
+
+
+def test_routines_api(hub):
+    with TestClient(create_app(hub=hub)) as client:
+        client.post("/scenes", json={"name": "Boa noite", "actions": [{"device_id": "luz-sala", "command": "turn_off"}]})
+        r = client.post("/routines", json={"name": "Dormir", "scene_id": "boa-noite", "trigger": {"type": "time", "at": "22:30", "days": ["dom"]}})
+        assert r.status_code == 201 and r.json()["id"] == "dormir" and r.json()["enabled"] is True
+        r = client.post("/routines", json={"name": "TV", "scene_id": "boa-noite", "trigger": {"type": "state", "device_id": "ar-quarto", "equals": False}})
+        assert r.status_code == 201 and r.json()["trigger"]["attribute"] == "power"
+        assert client.post("/routines", json={"name": "X", "scene_id": "nada", "trigger": {"type": "time", "at": "10:00"}}).status_code == 400
+        assert client.patch("/routines/dormir", json={"enabled": False}).json()["enabled"] is False
+        assert client.patch("/routines/nada", json={"enabled": False}).status_code == 404
+        assert client.delete("/routines/tv").status_code == 204
+        assert [x["id"] for x in client.get("/routines").json()] == ["dormir"]

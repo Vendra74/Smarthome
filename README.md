@@ -50,6 +50,14 @@ salva o estado atual deles. Por voz também: "cria a cena modo filme com a TV da
 sala no Netflix e a luz em 20%", "ativa o modo filme", "salva a sala assim como
 cena jantar". As cenas ficam em `data/homes/<id>/scenes.yaml`.
 
+**Rotinas.** Uma cena disparada sozinha: por horário ("todo dia às 22h, boa
+noite", com dias da semana) ou quando um aparelho muda de estado ("quando a TV
+da sala ligar, modo filme"). Pelo app, em *+ Cena › Rotinas*, dá para agendar
+por horário, pausar e remover; por voz dá para criar qualquer gatilho. O
+relógio da central confere a cada 30 s (hora local do computador) e os
+gatilhos de estado valem quando o estado muda de fato, vistos nos comandos e
+nas consultas do app. Ficam em `data/homes/<id>/routines.yaml`.
+
 O microfone do navegador só funciona em `localhost` ou com HTTPS. Para usar no
 celular pela rede de casa, gere um certificado local com
 [mkcert](https://github.com/FiloSottile/mkcert) e suba a central com ele:

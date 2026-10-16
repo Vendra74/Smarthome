@@ -17,6 +17,7 @@ from .adapters.samsung_lan import same_tv
 from .models import Command, CommandResult, Device, DeviceState, DeviceType, DiscoveredDevice
 from .recovery import TVRecovery
 from .registry import DeviceRegistry
+from .routines import Routine, RoutineRunner, RoutineStore, StateTrigger, TimeTrigger
 from .scenes import Scene, SceneAction, SceneResult, SceneStore, actions_from_state
 
 if TYPE_CHECKING:
@@ -57,9 +58,12 @@ class Hub:
         home: HomeConfig | None = None,
         recovery: TVRecovery | None = None,
         scenes: SceneStore | None = None,
+        routines: RoutineStore | None = None,
     ) -> None:
         self.home = home
         self.scenes = scenes or SceneStore()
+        self.routines = routines or RoutineStore()
+        self.routine_runner = RoutineRunner(self.routines)
         self.recovery = recovery or TVRecovery()
         self.registry = registry
         self.integrations: list[dict[str, str]] = []
@@ -111,6 +115,7 @@ class Hub:
             log.warning("Falha em %s %s: %s", device_id, command.value, exc)
             return CommandResult(device_id=device_id, ok=False, message=str(exc))
         log.info("%s <- %s %s %s", device_id, command.value, params or {}, note)
+        await self.routine_runner.observe(self, device_id, state)
         return CommandResult(device_id=device_id, ok=True, state=state, message=note)
 
     async def get_state(self, device_id: str) -> DeviceState | None:
@@ -129,6 +134,7 @@ class Hub:
                 state = await self.recovery.state(self, device, state)
             except Exception as exc:  # a busca na rede nunca pode derrubar a listagem
                 log.warning("Busca de %s na rede local falhou: %s", device_id, exc)
+        await self.routine_runner.observe(self, device_id, state)
         return state
 
     async def discover(self, adapter_name: str | None = None) -> list[DiscoveredDevice]:
@@ -221,6 +227,22 @@ class Hub:
         while self.scenes.get(scene_id):
             scene_id, n = f"{base}-{n}", n + 1
         return self.scenes.add(Scene(id=scene_id, name=name, aliases=aliases or [], actions=actions))
+
+    def create_routine(self, name: str, trigger: TimeTrigger | StateTrigger, scene_id: str) -> Routine:
+        if self.scenes.get(scene_id) is None:
+            raise ValueError(f"Cena '{scene_id}' não existe")
+        if isinstance(trigger, StateTrigger) and self.registry.get(trigger.device_id) is None:
+            raise ValueError(f"Dispositivo '{trigger.device_id}' não está cadastrado")
+        if isinstance(trigger, TimeTrigger):
+            try:
+                time.strptime(trigger.at, "%H:%M")
+            except ValueError as exc:
+                raise ValueError(f"Hora '{trigger.at}' inválida; use HH:MM") from exc
+        base = slugify(name) or "rotina"
+        routine_id, n = base, 2
+        while self.routines.get(routine_id):
+            routine_id, n = f"{base}-{n}", n + 1
+        return self.routines.add(Routine(id=routine_id, name=name, trigger=trigger, scene_id=scene_id))
 
     async def snapshot_scene(self, name: str, device_ids: list[str], aliases: list[str] | None = None) -> Scene:
         """Salva o estado atual dos aparelhos escolhidos como uma cena."""

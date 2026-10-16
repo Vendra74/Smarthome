@@ -91,6 +91,27 @@
       <h3>Cenas existentes</h3>
       <div></div>
     </section>
+    <section id="routine-section" class="scene-list" hidden>
+      <h3>Rotinas</h3>
+      <p class="hint">Uma cena disparada sozinha, num horário ou quando um aparelho ligar. Por voz dá para fazer qualquer gatilho ("quando a TV da sala ligar, modo filme").</p>
+      <div id="routine-list"></div>
+      <form id="routine-form" class="routine-form">
+        <label>Cena <select name="scene_id"></select></label>
+        <label>Horário <input name="at" type="time" required></label>
+        <fieldset class="days">
+          <legend>Dias</legend>
+          <label><input type="checkbox" name="day" value="seg">seg</label>
+          <label><input type="checkbox" name="day" value="ter">ter</label>
+          <label><input type="checkbox" name="day" value="qua">qua</label>
+          <label><input type="checkbox" name="day" value="qui">qui</label>
+          <label><input type="checkbox" name="day" value="sex">sex</label>
+          <label><input type="checkbox" name="day" value="sab">sáb</label>
+          <label><input type="checkbox" name="day" value="dom">dom</label>
+        </fieldset>
+        <p id="routine-error" class="error" hidden></p>
+        <menu><button type="submit" class="ghost">Agendar</button></menu>
+      </form>
+    </section>
   </dialog>
 
   <dialog id="accounts-dialog">

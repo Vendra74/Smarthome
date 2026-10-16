@@ -107,6 +107,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .scene-list h3 { margin: 0 0 6px; font-size: .95rem; }
 .scene-list .account { padding: 6px 0; }
 .scene-list[hidden] { display: none; }
+.routine-form { margin-top: 8px; }
+.routine-form .days { border: 0; padding: 0; margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.routine-form .days legend { font-size: .9rem; color: var(--muted); margin-bottom: 4px; }
+.routine-form .days label { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-size: .9rem; color: var(--text); }
+.routine-form menu { margin-top: 4px; }
+.account .detail.off { text-decoration: line-through; }
 
 .rooms {
   display: flex;
