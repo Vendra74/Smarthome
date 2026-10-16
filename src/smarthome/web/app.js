@@ -563,7 +563,11 @@ function setupAccountsDialog() {
       const button = document.createElement("button");
       button.type = "button";
       if (acc.status === "connected" && !acc.removable) {
-        button.hidden = true; // veio de chave do .env: só quem configurou a central tira
+        // veio de chave do .env: só quem configurou a central tira, mas dá para entrar com a conta
+        button.hidden = !acc.can_connect;
+        button.className = "ghost";
+        button.textContent = "Entrar com a conta";
+        button.addEventListener("click", () => connect(acc.id));
       } else if (acc.status === "connected") {
         button.className = "ghost";
         button.textContent = "Desconectar";

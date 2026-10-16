@@ -63,6 +63,7 @@ class Account(BaseModel):
     status: str  # connected, available, unavailable
     detail: str
     removable: bool = True  # False quando entrou por chave do .env (sem "Desconectar")
+    can_connect: bool = False  # True quando dá para entrar com a conta mesmo já ligada por chave
 
 
 class TuyaQRRequest(BaseModel):
@@ -201,15 +202,24 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
         out = []
         for key, meta in PROVIDERS.items():
             removable = True
+            login_available = key != "smartthings" or SmartThingsOAuth.from_env() is not None
             if key in connected:
                 status, detail = "connected", "conectada"
             elif key in _hub().adapters:
                 status, detail, removable = "connected", "conectada por chave da central", False
-            elif key == "smartthings" and SmartThingsOAuth.from_env() is None:
+                if login_available:
+                    detail += "; entre com a conta para dispensar a chave"
+            elif not login_available:
                 status, detail = "unavailable", "ainda não liberada nesta central"
             else:
                 status, detail = "available", "não conectada"
-            out.append(Account(id=key, status=status, detail=detail, removable=removable, **meta))
+            out.append(
+                Account(
+                    id=key, status=status, detail=detail, removable=removable,
+                    can_connect=login_available and (status != "connected" or not removable),
+                    **meta,
+                )
+            )
         return out
 
     @app.post("/accounts/smartthings/start")

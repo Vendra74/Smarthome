@@ -94,7 +94,13 @@ def test_accounts_flow(hub, tmp_path, monkeypatch):
         # ligada por chave do .env: aparece conectada, sem botão de desconectar
         hub.adapters["smartthings"] = hub.adapters["virtual"]
         st = {a["id"]: a for a in client.get("/accounts").json()}["smartthings"]
-        assert st["status"] == "connected" and st["removable"] is False
+        assert st["status"] == "connected" and st["removable"] is False and st["can_connect"] is False
+        monkeypatch.setenv("SMARTTHINGS_CLIENT_ID", "cid")
+        monkeypatch.setenv("SMARTTHINGS_CLIENT_SECRET", "sec")
+        st = {a["id"]: a for a in client.get("/accounts").json()}["smartthings"]
+        assert st["can_connect"] is True and "entre com a conta" in st["detail"]
+        monkeypatch.delenv("SMARTTHINGS_CLIENT_ID")
+        monkeypatch.delenv("SMARTTHINGS_CLIENT_SECRET")
         del hub.adapters["smartthings"]
         assert accounts["tuya"]["status"] == "available" and accounts["tuya"]["method"] == "qr"
         assert client.post("/accounts/smartthings/start").status_code == 503
