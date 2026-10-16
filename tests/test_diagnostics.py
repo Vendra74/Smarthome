@@ -136,3 +136,13 @@ def test_registry_unescapes_old_names(tmp_path):
     path = tmp_path / "devices.yaml"
     path.write_text('devices:\n  - id: tv\n    name: "85&quot; Crystal UHD"\n    type: tv\n    adapter: samsung_tv\n', encoding="utf-8")
     assert DeviceRegistry(path).get("tv").name == '85" Crystal UHD'
+
+
+def test_errors_are_forgotten_when_device_comes_back(hub, monkeypatch):
+    monkeypatch.setattr(samsung_lan, "lan_blocked", lambda: False)
+    for _ in range(3):
+        hub._note_error("luz-sala", "turn_on", "NOT_CONNECTED_DEVICE (1222)")
+    hub.last_states["luz-sala"] = (time.monotonic(), DeviceState(online=False))
+    assert {"offline"} <= set(codes(run(diagnose(hub))))
+    run(hub.get_state("luz-sala"))  # virtual responde online
+    assert codes(run(diagnose(hub))) == []

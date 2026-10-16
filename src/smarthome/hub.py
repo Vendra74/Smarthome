@@ -83,6 +83,14 @@ class Hub:
     def _note_error(self, device_id: str, command: str, message: str) -> None:
         self.recent_errors.append({"time": time.time(), "device_id": device_id, "command": command, "message": message})
 
+    def _note_ok(self, device_id: str, state: DeviceState) -> None:
+        """Aparelho respondeu online: as falhas antigas dele deixam de contar no diagnóstico."""
+        self.last_states[device_id] = (time.monotonic(), state)
+        if state.online and any(e["device_id"] == device_id for e in self.recent_errors):
+            kept = [e for e in self.recent_errors if e["device_id"] != device_id]
+            self.recent_errors.clear()
+            self.recent_errors.extend(kept)
+
     def set_adapter(self, adapter: Adapter) -> None:
         """Liga (ou troca) um adaptador em tempo de execução, ex.: quando uma conta é conectada."""
         self.adapters[adapter.name] = adapter
@@ -126,7 +134,7 @@ class Hub:
             self._note_error(device_id, command.value, str(exc))
             return CommandResult(device_id=device_id, ok=False, message=str(exc))
         log.info("%s <- %s %s %s", device_id, command.value, params or {}, note)
-        self.last_states[device_id] = (time.monotonic(), state)
+        self._note_ok(device_id, state)
         await self.routine_runner.observe(self, device_id, state)
         return CommandResult(device_id=device_id, ok=True, state=state, message=note)
 
@@ -147,7 +155,7 @@ class Hub:
                 state = await self.recovery.state(self, device, state)
             except Exception as exc:  # a busca na rede nunca pode derrubar a listagem
                 log.warning("Busca de %s na rede local falhou: %s", device_id, exc)
-        self.last_states[device_id] = (time.monotonic(), state)
+        self._note_ok(device_id, state)
         await self.routine_runner.observe(self, device_id, state)
         return state
 
