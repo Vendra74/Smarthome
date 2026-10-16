@@ -393,3 +393,22 @@ def test_stale_ip_is_replaced_from_the_last_scan(tmp_path):
     state = asyncio.run(hub.get_state("tv-sala"))
     assert state.online and state.power
     assert hub.registry.get("tv-sala").config["host"] == "192.168.0.40"
+
+
+def test_tv_reachable_but_mute_about_power_gets_the_power_key(tmp_path):
+    """TV responde em espera sem informar energia e ignora o Wake-on-LAN: a tecla POWER pela rede acorda."""
+
+    class LocalWithKey(LocalTV):
+        def __init__(self):
+            super().__init__()
+            self.keys = []
+
+        async def power_key(self, device):
+            self.keys.append(device.id)
+
+    cloud = FlakyCloud(fails=2)
+    lan = [{"host": "192.168.0.217", "name": TV_NAME, "model": "", "mac": "64:1C:B0:0F:B9:3A", "power": True, "power_known": False}]
+    local = LocalWithKey()
+    hub, woken = make_hub(tmp_path, cloud, lan=lan, local=local)
+    result = asyncio.run(hub.execute("tv-sala", Command.TURN_ON))
+    assert result.ok and woken and local.keys == ["tv-sala"]

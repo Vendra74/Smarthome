@@ -47,6 +47,7 @@ async def main(device_id: str, wait: float) -> None:
     if host and samsung_lan.local_network() and ipaddress.ip_address(host) not in samsung_lan.local_network():
         print("ATENÇÃO: o IP da TV está em outra rede que a central.")
 
+    info = None
     if host:
         info = await samsung_lan.tv_info(host, timeout=2.0)
         if info:
@@ -69,13 +70,29 @@ async def main(device_id: str, wait: float) -> None:
     print("\nMandando pacote de acordar:")
     for target in _targets(host):
         print(f"  -> {target}: {_send(mac, target)}")
+    knows_power = bool(info and info["power_known"]) if host else False
+    if host and info and not knows_power:
+        # TV que responde em espera mas não diz se está ligada: o Wake-on-LAN costuma ser
+        # ignorado por ela; a tecla POWER pela rede é o que a acorda.
+        print("\nEsta TV não informa energia pela porta 8001. Mandando a tecla POWER pela rede (8002)...")
+        local = hub.adapters.get("samsung_tv")
+        if local is None:
+            print("  adaptador samsung_tv não está ativo nesta central; adicione-o em adapters no home.yaml.")
+        else:
+            try:
+                await local.power_key(device)
+                print("  tecla enviada. Se a TV estava em espera, ela deve ligar agora (na primeira vez ela pede")
+                print("  autorização na tela: aceite). Se estava ligada, ela desliga: é a mesma tecla.")
+            except Exception as exc:  # mostra o motivo
+                print(f"  falhou: {exc}")
+        return
     print(f"\nEsperando a TV responder (até {int(wait)} s)...")
     started = time.monotonic()
     while time.monotonic() - started < wait:
         await asyncio.sleep(2)
         if host:
             info = await samsung_lan.tv_info(host, timeout=2.0)
-            if info and info["power"]:
+            if info and info["power"] and info["power_known"]:
                 print(f"  acordou em {time.monotonic() - started:.0f} s (porta 8001 diz ligada).")
                 return
     print("  não respondeu. Conclusão: o pacote não chega à TV ou ela não acorda por rede neste estado.")

@@ -228,6 +228,17 @@ class TVRecovery:
         host = device.config.get("host")
         for _ in range(3):
             self._wake(mac, host=host)
+        if tv is not None and command == Command.TURN_ON:
+            # A TV responde na rede em espera (Wi-Fi ligado) mas não acordou com a nuvem:
+            # algumas ignoram o Wake-on-LAN e só acordam com a tecla POWER pela rede.
+            local = hub.adapters.get("samsung_tv")
+            power_key = getattr(local, "power_key", None)
+            if power_key is not None:
+                try:
+                    await power_key(device)
+                    log.info("%s: tecla POWER mandada pela rede", device.id)
+                except AdapterError as exc:
+                    log.info("%s: tecla POWER pela rede falhou: %s", device.id, exc)
         waited = 0.0
         while waited < self.timeout:
             await self._sleep(self.interval)

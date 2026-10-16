@@ -67,6 +67,14 @@ class SamsungTVAdapter(Adapter):
                 "cadastre a TV pelo SmartThings para volume absoluto"
             )
 
+    async def power_key(self, device: Device) -> None:
+        """Manda a tecla POWER pela rede. TV em espera com Wi-Fi ligado acorda com isso
+        mesmo quando ignora o Wake-on-LAN; em TV ligada, desliga (quem chama decide)."""
+        try:
+            await asyncio.to_thread(lambda: self._connect(device).send_key("KEY_POWER"))
+        except Exception as exc:
+            raise AdapterError(f"TV Samsung {device.id}: tecla POWER pela rede falhou: {exc}") from exc
+
     async def execute(self, device: Device, command: Command, params: dict[str, Any]) -> DeviceState:
         if command == Command.TURN_ON:
             mac = device.config.get("mac")
