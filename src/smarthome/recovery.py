@@ -54,6 +54,7 @@ class TVRecovery:
         self._scan_cache: tuple[float, list[dict[str, Any]]] | None = None
         self._scan_lock = asyncio.Lock()
         self._last_logged: list[tuple[Any, ...]] | None = None
+        self._last_learn = -1e9
 
     def last_scan(self) -> tuple[float, list[dict[str, Any]]] | None:
         """(idade em segundos, TVs vistas) da última varredura, ou None se ainda não houve."""
@@ -123,6 +124,7 @@ class TVRecovery:
         async def loop() -> None:
             while True:
                 try:
+                    self._last_learn = time.monotonic()
                     await self.learn(hub)
                 except Exception as exc:  # nunca derruba a central
                     log.warning("Aprendizado das TVs falhou: %s", exc)
@@ -142,6 +144,23 @@ class TVRecovery:
             self._wake(mac, host=device.config.get("host"))
         except (OSError, ValueError) as exc:
             log.info("Wake-on-LAN preventivo em %s falhou: %s", device.id, exc)
+
+    def _background_learn(self, hub: Hub, min_gap: float = 60.0) -> None:
+        """Roda `learn` em segundo plano, no máximo uma vez a cada `min_gap` s."""
+        if time.monotonic() - self._last_learn < min_gap:
+            return
+        task = getattr(self, "_learn_task", None)
+        if task is not None and not task.done():
+            return
+        self._last_learn = time.monotonic()
+
+        async def run() -> None:
+            try:
+                await self.learn(hub)
+            except Exception as exc:  # nunca derruba a listagem
+                log.warning("Aprendizado das TVs falhou: %s", exc)
+
+        self._learn_task = asyncio.ensure_future(run())
 
     def _background_scan(self) -> None:
         """Dispara uma varredura sem esperar por ela (uma de cada vez)."""
@@ -243,6 +262,10 @@ class TVRecovery:
 
         Sem IP conhecido, varre a rede no máximo uma vez por minuto por TV."""
         if state.online:
+            if not device.config.get("mac"):
+                # A TV acabou de aparecer na nuvem: é a hora de aprender IP e MAC dela,
+                # sem esperar o próximo ciclo de 5 min.
+                self._background_learn(hub)
             return state
         if device.config.get("host"):
             found = await self._info(device.config["host"])

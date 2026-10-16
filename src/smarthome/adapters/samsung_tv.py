@@ -14,7 +14,7 @@ from typing import Any
 
 from ..models import Command, Device, DeviceState, DeviceType, DiscoveredDevice
 from .base import Adapter, AdapterError
-from .samsung_lan import find_samsung_tvs
+from .samsung_lan import find_samsung_tvs, tv_info
 from .wol import send_magic_packet
 
 # IDs de apps conhecidos na Tizen; o usuário pode passar o ID direto também.
@@ -95,12 +95,9 @@ class SamsungTVAdapter(Adapter):
         ]
 
     async def get_state(self, device: Device) -> DeviceState:
-        def info() -> dict[str, Any]:
-            return self._connect(device).rest_device_info()
-
-        try:
-            data = await asyncio.to_thread(info)
-        except Exception:
+        # Pergunta direto à porta 8001 com timeout curto: a biblioteca não tem timeout e,
+        # com a TV desligada, cada consulta esperava os 75 s do TCP do macOS.
+        info = await tv_info(device.config["host"], timeout=2.0)
+        if info is None:
             return DeviceState(online=False, power=False)
-        power = data.get("device", {}).get("PowerState", "on") == "on"
-        return DeviceState(power=power)
+        return DeviceState(power=info["power"])

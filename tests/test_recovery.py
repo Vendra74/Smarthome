@@ -307,3 +307,24 @@ def test_scan_merges_ssdp_with_sweep_and_extra_networks(monkeypatch):
     found = asyncio.run(samsung_lan.find_samsung_tvs())
     assert [t["host"] for t in found] == ["10.0.0.18", "10.0.0.20", "192.168.0.30"]
     assert [str(n) for n in samsung_lan.extra_networks()] == ["192.168.0.0/24"]
+
+
+def test_tv_online_in_the_cloud_is_learned_right_away(tmp_path):
+    """TV aparece ligada pela nuvem sem IP/MAC: a central busca na rede na hora, não em 5 min."""
+
+    class OnlineCloud(FlakyCloud):
+        async def get_state(self, device):
+            return DeviceState(online=True, power=True)
+
+    lan = [{"host": "10.0.0.10", "name": TV_NAME, "model": "", "mac": "AA:BB:CC:DD:EE:01", "power": True}]
+    hub, _ = make_hub(tmp_path, OnlineCloud(fails=0), lan=lan)
+
+    async def flow():
+        state = await hub.get_state("tv-sala")
+        assert state.online and state.power
+        await asyncio.sleep(0)  # deixa o aprendizado em segundo plano rodar
+        await hub.recovery._learn_task
+        return hub.registry.get("tv-sala").config
+
+    config = asyncio.run(flow())
+    assert config["host"] == "10.0.0.10" and config["mac"] == "AA:BB:CC:DD:EE:01"

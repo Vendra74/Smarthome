@@ -7,6 +7,7 @@ quem publica o app, por Personal Access Token na variável SMARTTHINGS_TOKEN.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -154,6 +155,19 @@ class SmartThingsAdapter(Adapter):
         try:
             await self._request("POST", f"/devices/{self._external_id(device)}/commands", json=body)
         except AdapterError as exc:
+            # 422 "response code is NOT_FOUND" num desligar: a TV costuma ter obedecido e
+            # entrado em standby antes de responder à nuvem. Confere em vez de dar erro.
+            if command == Command.TURN_OFF and "422" in str(exc) and "NOT_FOUND" in str(exc):
+                await asyncio.sleep(2)
+                self._state_cache.pop(self._external_id(device), None)
+                self._health_cache.pop(self._external_id(device), None)
+                try:
+                    state = await self.get_state(device)
+                except AdapterError:
+                    raise exc from None
+                if not state.online or not state.power:
+                    log.info("%s: a SmartThings deu 422 no desligar, mas a TV desligou", device.id)
+                    return DeviceState(online=state.online, power=False, attributes=state.attributes)
             # 409 é a SmartThings sem conseguir falar com o aparelho agora. O endpoint de saúde
             # costuma confirmar (OFFLINE), mas em TVs Samsung em standby ele ainda diz ONLINE
             # por um tempo; nesse caso o 409 por si só já indica que a TV não respondeu.

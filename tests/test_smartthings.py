@@ -156,3 +156,34 @@ def test_fan_speed_uses_fan_mode_capability():
         "command": "setFanMode",
         "arguments": ["high"],
     }
+
+
+def test_turn_off_422_not_found_is_checked_against_the_state(monkeypatch):
+    """A TV obedece ao desligar e entra em standby antes de responder: a SmartThings dá 422."""
+    import smarthome.adapters.smartthings as st
+
+    async def no_sleep(_s):
+        pass
+
+    monkeypatch.setattr(st.asyncio, "sleep", no_sleep)
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path.endswith("/commands"):
+            return httpx.Response(422, json={"error": {"code": "UnprocessableEntityError", "message": "response code is NOT_FOUND"}})
+        if request.url.path.endswith("/health"):
+            return httpx.Response(200, json={"state": "OFFLINE"})
+        return httpx.Response(200, json={"components": {"main": {"switch": {"switch": {"value": "off"}}}}})
+
+    adapter = SmartThingsAdapter("token", transport=httpx.MockTransport(handler))
+    tv = Device(id="tv", name="TV", type=DeviceType.TV, adapter="smartthings", config={"device_id": "t1"})
+    state = asyncio.run(adapter.execute(tv, Command.TURN_OFF, {}))
+    assert state.power is False
+    # ligar com 422 continua sendo erro
+    try:
+        asyncio.run(adapter.execute(tv, Command.TURN_ON, {}))
+    except Exception as exc:
+        assert "422" in str(exc)
+    else:
+        raise AssertionError("ligar com 422 deveria falhar")
