@@ -55,6 +55,24 @@ class TVRecovery:
         self._scan_lock = asyncio.Lock()
         self._last_logged: list[tuple[Any, ...]] | None = None
 
+    def last_scan(self) -> tuple[float, list[dict[str, Any]]] | None:
+        """(idade em segundos, TVs vistas) da última varredura, ou None se ainda não houve."""
+        if self._scan_cache is None:
+            return None
+        return time.monotonic() - self._scan_cache[0], list(self._scan_cache[1])
+
+    async def scan_now(self, max_age: float = 60.0) -> list[dict[str, Any]]:
+        """Garante uma varredura recente (no máximo `max_age` s) e devolve as TVs vistas."""
+        return await self._scan_shared(max_age=max_age)
+
+    def unmatched(self, hub: Hub) -> list[dict[str, Any]]:
+        """TVs vistas na rede que não casam com nenhuma TV cadastrada da SmartThings."""
+        scan = self.last_scan()
+        if not scan:
+            return []
+        registered = [d for d in hub.registry.all() if self.applies(d)]
+        return [tv for tv in scan[1] if not any(self._matches(tv, d) for d in registered)]
+
     def applies(self, device: Device) -> bool:
         return device.type == DeviceType.TV and device.adapter == "smartthings"
 

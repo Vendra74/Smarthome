@@ -71,6 +71,32 @@ def _group(findings: list[Finding], code: str, title, detail: str, action: str) 
     return rest + [merged]
 
 
+def _scan_summary(hub: Hub, central_net: ipaddress.IPv4Network | None) -> str:
+    """O que a última busca de TVs na rede encontrou e o que isso sugere."""
+    scan = hub.recovery.last_scan()
+    if scan is None:
+        return "A central ainda não terminou a primeira busca na rede."
+    age, tvs = scan
+    when = "agora há pouco" if age < 90 else f"há {int(age // 60)} min"
+    if not tvs:
+        where = f" (a central está em {central_net})" if central_net else ""
+        extra = samsung_lan.extra_networks()
+        text = f"Na última busca ({when}) a central não achou nenhuma TV Samsung na rede{where}."
+        if extra:
+            text += " Nem nas redes extras " + ", ".join(str(n) for n in extra) + "."
+        return text + (" Se alguma TV está ligada e mesmo assim não aparece, ela deve estar no outro Wi-Fi da casa "
+                       "(o do modem): confira o nome da rede em Ajustes > Rede na TV e ponha TV e central no mesmo Wi-Fi, "
+                       "ou avise a central da outra rede com TV_SCAN_NETWORKS no .env.")
+    seen = "; ".join(f"{t['name'] or t['model'] or '?'} ({t['host']})" for t in tvs)
+    text = f"Na última busca ({when}) a central viu: {seen}."
+    unmatched = hub.recovery.unmatched(hub)
+    if unmatched:
+        names = ", ".join(f"'{t['name']}'" for t in unmatched)
+        text += (f" {names} não casa com o nome de nenhuma TV cadastrada; se é uma delas, "
+                 "dê esse nome como apelido da TV (em Adicionar/Editar) ou renomeie no app SmartThings.")
+    return text
+
+
 async def diagnose(hub: Hub, fresh: bool = False) -> HealthReport:
     findings: list[Finding] = []
     devices = hub.registry.all()
@@ -169,6 +195,12 @@ async def diagnose(hub: Hub, fresh: bool = False) -> HealthReport:
                       lambda n: f"{n} TVs estão fora da nuvem e a central ainda não as viu na rede",
                       "Provavelmente estão desligadas. Sem IP e MAC, não dá para acordá-las quando a SmartThings as perde.",
                       "Ligue cada uma pelo controle uma vez com a central rodando; ela aprende sozinha. " + hub.recovery_hint())
+    # ...e dizem o que a última varredura viu, para a pessoa não precisar do log
+    if any(f.code == "tv_unknown_lan" for f in findings) and (fresh or hub.recovery.last_scan() is None):
+        await hub.recovery.scan_now(max_age=0.0 if fresh else 60.0)
+    for f in findings:
+        if f.code == "tv_unknown_lan":
+            f.detail = (f.detail + " " + _scan_summary(hub, central_net)).strip()
     findings = _group(findings, "offline", lambda n: f"{n} aparelhos estão sem conexão",
                       "O fabricante informa os aparelhos offline.",
                       "Confira tomada e Wi-Fi de cada um; se o Wi-Fi mudou, refaça o pareamento no app do fabricante.")

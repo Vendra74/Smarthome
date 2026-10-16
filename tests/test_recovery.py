@@ -287,3 +287,23 @@ def test_learn_matches_tv_by_smartthings_label_even_when_user_renamed_it(tmp_pat
     asyncio.run(recovery.learn(hub))
     saved = DeviceRegistry(tmp_path / "devices.yaml").get("tv-sala").config
     assert saved == {"device_id": "st-1", "st_name": "[TV] Samsung 6 Series (55)", "host": "10.0.0.10", "mac": "AA:BB:CC:DD:EE:01"}
+
+
+def test_scan_merges_ssdp_with_sweep_and_extra_networks(monkeypatch):
+    """TV que não responde multicast, ou que está no outro roteador, ainda é encontrada."""
+    import ipaddress
+
+    from smarthome.adapters import samsung_lan
+
+    async def fake_info(host, timeout=2.0):
+        if host in ("10.0.0.18", "10.0.0.20", "192.168.0.30"):
+            return {"host": host, "name": f"TV {host}", "model": "", "mac": None, "power": True}
+        return None
+
+    monkeypatch.setattr(samsung_lan, "_ssdp_hosts", lambda timeout: {"10.0.0.18"})
+    monkeypatch.setattr(samsung_lan, "tv_info", fake_info)
+    monkeypatch.setattr(samsung_lan, "local_network", lambda: ipaddress.ip_network("10.0.0.0/24"))
+    monkeypatch.setenv("TV_SCAN_NETWORKS", "192.168.0.0/24, 10.0.0.0/8, lixo")
+    found = asyncio.run(samsung_lan.find_samsung_tvs())
+    assert [t["host"] for t in found] == ["10.0.0.18", "10.0.0.20", "192.168.0.30"]
+    assert [str(n) for n in samsung_lan.extra_networks()] == ["192.168.0.0/24"]

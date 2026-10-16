@@ -13,6 +13,7 @@ import errno
 import html
 import ipaddress
 import logging
+import os
 import re
 import socket
 from typing import Any
@@ -132,23 +133,52 @@ async def sweep_samsung_tvs(network: ipaddress.IPv4Network, timeout: float = 1.5
     return [i for i in infos if i]
 
 
+def extra_networks() -> list[ipaddress.IPv4Network]:
+    """Outras redes da casa a varrer (TV_SCAN_NETWORKS=192.168.0.0/24,...), para casas com dois
+    roteadores em que as TVs não estão no mesmo Wi-Fi da central."""
+    raw = os.environ.get("TV_SCAN_NETWORKS", "")
+    networks = []
+    for item in raw.replace(";", ",").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            network = ipaddress.ip_network(item if "/" in item else f"{item}/24", strict=False)
+        except ValueError:
+            log.warning("TV_SCAN_NETWORKS: rede inválida ignorada: %r", item)
+            continue
+        if network.num_addresses <= 256:
+            networks.append(network)
+        else:
+            log.warning("TV_SCAN_NETWORKS: %s é grande demais (máximo /24), ignorada", network)
+    return networks
+
+
 async def find_samsung_tvs(timeout: float = 3.0) -> list[dict[str, Any]]:
     """TVs Samsung ligadas (ou em standby com rede ativa) na rede local.
 
-    Tenta SSDP primeiro (rápido); se não achar nada, varre a rede IP a IP."""
+    Junta o que o SSDP anuncia com uma varredura IP a IP da rede da central e das redes
+    extras configuradas: TV que não responde multicast (ou está no outro roteador) ainda
+    aparece."""
     hosts = await asyncio.to_thread(_ssdp_hosts, timeout)
     infos = await asyncio.gather(*(tv_info(h) for h in sorted(hosts)))
-    found = [i for i in infos if i]
-    if found:
-        return found
-    network = local_network()
-    if network is None:
-        return []
-    log.debug("SSDP não achou TV; varrendo %s", network)
-    found = await sweep_samsung_tvs(network)
+    found = {i["host"]: i for i in infos if i}
+    networks = [n for n in [local_network()] if n is not None] + extra_networks()
+    for network in networks:
+        log.debug("Varrendo %s", network)
+        for tv in await sweep_samsung_tvs(network):
+            found.setdefault(tv["host"], tv)
     if not found and _blocked:
         log.warning(MACOS_HINT)
-    return found
+    return sorted(found.values(), key=lambda t: ipaddress.ip_address(t["host"]) if _is_ip(t["host"]) else ipaddress.ip_address("0.0.0.0"))
+
+
+def _is_ip(text: str) -> bool:
+    try:
+        ipaddress.ip_address(text)
+        return True
+    except ValueError:
+        return False
 
 
 def same_tv(a: str, b: str) -> bool:

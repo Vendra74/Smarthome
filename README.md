@@ -111,6 +111,15 @@ liberado em *Ajustes do Sistema > Privacidade e Segurança > Rede local*
 (ligue o Terminal, iTerm ou VS Code, de onde a central roda). Sem isso toda
 busca dá "No route to host"; a central percebe e avisa no app e no log.
 
+Casa com dois roteadores (modem da operadora e um mesh em modo roteador): a
+busca só enxerga a rede em que a central está. Se uma TV ligada continua "fora
+da nuvem e a central ainda não a viu", o diagnóstico diz o que a última busca
+encontrou. Para ver na hora, rode `python -m smarthome.tools.tv_scan` (aceita
+outra rede como argumento, ex. `192.168.0.0/24`). Se a TV está no outro Wi-Fi,
+o certo é pôr TV e central no mesmo; enquanto isso, `TV_SCAN_NETWORKS` no
+`.env` manda a central varrer também essa rede (o acordar por rede, porém, não
+atravessa roteadores).
+
 ## Contas: entrar com a conta, sem chave nem token
 
 Quem usa a central não cria conta de desenvolvedor nem copia token. O botão

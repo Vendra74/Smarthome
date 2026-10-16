@@ -152,3 +152,35 @@ def test_errors_are_forgotten_when_device_comes_back(hub, monkeypatch):
     assert {"offline"} <= set(codes(run(diagnose(hub))))
     run(hub.get_state("luz-sala"))  # virtual responde online
     assert codes(run(diagnose(hub))) == []
+
+
+def test_tv_finding_tells_what_the_scan_saw(hub, monkeypatch):
+    import ipaddress
+
+    monkeypatch.setattr(samsung_lan, "lan_blocked", lambda: False)
+    monkeypatch.setattr(samsung_lan, "local_network", lambda: ipaddress.ip_network("10.0.0.0/24"))
+
+    class Offline:
+        name = "smartthings"
+
+        async def execute(self, device, command, params):
+            return DeviceState(online=False)
+
+        async def get_state(self, device):
+            return DeviceState(online=False)
+
+        async def discover(self):
+            return []
+
+    hub.set_adapter(Offline())
+    hub.registry.add(Device(id="tv-b", name="TV B", type=DeviceType.TV, adapter="smartthings"))
+    hub.recovery._scan = lambda: asyncio.sleep(0, result=[])
+    report = run(diagnose(hub, fresh=True))
+    finding = next(f for f in report.findings if f.code == "tv_unknown_lan")
+    assert "não achou nenhuma TV" in finding.detail and "outro Wi-Fi" in finding.detail
+
+    stranger = {"host": "10.0.0.40", "name": "[TV] Samsung 7 Series (50)", "model": "", "mac": "AA", "power": True}
+    hub.recovery._scan = lambda: asyncio.sleep(0, result=[stranger])
+    report = run(diagnose(hub, fresh=True))
+    finding = next(f for f in report.findings if f.code == "tv_unknown_lan")
+    assert "10.0.0.40" in finding.detail and "não casa" in finding.detail
