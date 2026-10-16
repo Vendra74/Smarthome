@@ -14,6 +14,7 @@
   <header class="top">
     <h1 id="home-name">Casa</h1>
     <div class="top-actions">
+      <button id="open-network" class="ghost" type="button">Rede</button>
       <button id="open-accounts" class="ghost" type="button">Contas</button>
       <button id="add-device" class="ghost" type="button">Adicionar</button>
     </div>
@@ -122,6 +123,16 @@
     <menu>
       <button type="button" class="ghost" id="health-refresh">Verificar de novo</button>
       <button type="button" id="health-close">Fechar</button>
+    </menu>
+  </dialog>
+
+  <dialog id="network-dialog">
+    <h2>Rede da casa</h2>
+    <p id="network-summary" class="hint"></p>
+    <div id="network-list"></div>
+    <menu>
+      <button type="button" class="ghost" id="network-refresh">Buscar de novo</button>
+      <button type="button" id="network-close">Fechar</button>
     </menu>
   </dialog>
 

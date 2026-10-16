@@ -103,6 +103,13 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .finding p { margin: 3px 0 0; font-size: .88rem; color: var(--muted); }
 .finding p.action { color: var(--text); }
 
+/* Rede: aparelhos agrupados por rede, com IP e MAC */
+#network-list h3 { margin: 14px 0 4px; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.netrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.netrow .title { font-weight: 500; }
+.netrow .meta { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.netrow p { flex-basis: 100%; margin: 0; font-size: .85rem; color: var(--muted); }
+
 /* Cenas: botões logo abaixo do assistente; "+" abre a criação */
 .scenes { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 0 0; }
 .scenes:empty { display: none; }

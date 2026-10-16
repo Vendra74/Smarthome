@@ -105,6 +105,66 @@ function setupHealthDialog() {
   });
 }
 
+// ---------- Rede ----------
+
+function renderNetwork(view) {
+  const summary = $("#network-summary");
+  summary.textContent = view.central_ip
+    ? `A central está em ${view.central_ip} (rede ${view.central_network})` +
+      (view.extra_networks.length ? `; também procura em ${view.extra_networks.join(", ")}` : "") + "."
+    : "A central não descobriu a própria rede (sem conexão?).";
+  const list = $("#network-list");
+  list.replaceChildren();
+  const name = (d) => d.room ? `${d.name} · ${d.room}` : d.name;
+  const row = (title, meta, note) => {
+    const box = document.createElement("div");
+    box.className = "netrow";
+    box.append(Object.assign(document.createElement("div"), { className: "title", textContent: title }));
+    if (meta) box.append(Object.assign(document.createElement("span"), { className: "meta", textContent: meta }));
+    if (note) box.append(Object.assign(document.createElement("p"), { textContent: note }));
+    return box;
+  };
+  const section = (title, rows) => {
+    if (!rows.length) return;
+    list.append(Object.assign(document.createElement("h3"), { textContent: title }));
+    list.append(...rows);
+  };
+  const byNet = {};
+  for (const d of view.devices) (byNet[d.where] ||= []).push(d);
+  const addr = (d) => [d.host, d.mac].filter(Boolean).join(" · ");
+  section(`Na rede da central${view.central_network ? ` (${view.central_network})` : ""}`,
+    (byNet.central || []).map((d) => row(name(d), addr(d))));
+  const others = byNet.other || [];
+  const otherNets = [...new Set(others.map((d) => d.network))];
+  for (const net of otherNets) {
+    section(`Em outra rede (${net})`, others.filter((d) => d.network === net).map((d) => row(name(d), addr(d), d.how)));
+  }
+  section("Só pela nuvem (IP em casa desconhecido)", (byNet.cloud || []).map((d) => row(name(d), labelFor(d.adapter))));
+  const strangers = view.seen_tvs.filter((t) => !t.device_id);
+  section("Vistas na rede, sem cadastro", strangers.map((t) =>
+    row(t.name, [t.host, t.mac].filter(Boolean).join(" · ") + (t.power ? "" : " · em espera"),
+        "Se é uma TV cadastrada com outro nome, dê este nome como apelido dela em Adicionar/Editar.")));
+  const when = view.scan_age_s == null ? "ainda não terminou" : view.scan_age_s < 90 ? "agora há pouco" : `há ${Math.floor(view.scan_age_s / 60)} min`;
+  list.append(Object.assign(document.createElement("p"), { className: "hint", textContent:
+    `Última busca de TVs na rede: ${when}; ${view.seen_tvs.length} TV(s) Samsung respondeu(ram).` }));
+}
+
+function labelFor(adapter) {
+  return { smartthings: "SmartThings (Samsung)", lg_thinq: "LG ThinQ", tuya: "Smart Life / Tuya", virtual: "exemplo" }[adapter] || adapter;
+}
+
+function setupNetworkDialog() {
+  const dialog = $("#network-dialog");
+  const load = async (fresh) => {
+    $("#network-summary").textContent = fresh ? "Procurando na rede..." : "Carregando...";
+    try { renderNetwork(await api(`/network${fresh ? "?fresh=true" : ""}`)); }
+    catch (e) { $("#network-summary").textContent = e.message; }
+  };
+  $("#open-network").addEventListener("click", () => { dialog.showModal(); load(false); });
+  $("#network-close").addEventListener("click", () => dialog.close());
+  $("#network-refresh").addEventListener("click", () => load(true));
+}
+
 // ---------- Cenas ----------
 
 function renderScenes() {
@@ -936,6 +996,7 @@ setupAccountsDialog();
 setupSceneDialog();
 setupRoutineForm();
 setupHealthDialog();
+setupNetworkDialog();
 load().catch((error) => showReply(`Não consegui carregar a casa: ${error.message}`));
 setInterval(refreshStates, 15000);
 document.addEventListener("visibilitychange", refreshStates);

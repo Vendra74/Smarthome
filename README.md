@@ -66,6 +66,12 @@ mesmo diagnóstico para explicar uma falha ("por que a TV não liga?") em vez
 de só dizer que não conseguiu. Rota: `GET /health` (`?fresh=true` consulta os
 estados de novo).
 
+**Rede.** O botão *Rede* no topo mostra em que rede cada aparelho está, visto
+da central: os que estão na mesma rede (com IP e MAC), os que estão em outra
+rede (a central não os alcança nem acorda), os controlados só pela nuvem (sem
+IP conhecido) e TVs Samsung vistas na rede sem cadastro. Rota: `GET /network`
+(`?fresh=true` busca as TVs de novo).
+
 O microfone do navegador só funciona em `localhost` ou com HTTPS. Para usar no
 celular pela rede de casa, gere um certificado local com
 [mkcert](https://github.com/FiloSottile/mkcert) e suba a central com ele:

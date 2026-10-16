@@ -110,15 +110,20 @@ def _ssdp_hosts(timeout: float) -> set[str]:
     return hosts
 
 
-def local_network() -> ipaddress.IPv4Network | None:
-    """A rede /24 em que a central está (sem mandar pacote: só consulta a rota padrão)."""
+def local_ip() -> str | None:
+    """O IP da central na rede de casa (sem mandar pacote: só consulta a rota padrão)."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.connect(("8.8.8.8", 53))
-            ip = sock.getsockname()[0]
+            return sock.getsockname()[0]
     except OSError:
         return None
-    return ipaddress.ip_network(f"{ip}/24", strict=False)
+
+
+def local_network() -> ipaddress.IPv4Network | None:
+    """A rede /24 em que a central está."""
+    ip = local_ip()
+    return ipaddress.ip_network(f"{ip}/24", strict=False) if ip else None
 
 
 async def sweep_samsung_tvs(network: ipaddress.IPv4Network, timeout: float = 1.5) -> list[dict[str, Any]]:

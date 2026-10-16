@@ -19,6 +19,7 @@ from .agent import HomeAgent
 from .config import account_adapter, build_hub, integration_status
 from .diagnostics import HealthReport, diagnose
 from .hub import Hub
+from .network import NetworkView, network_view
 from .models import CommandRequest, CommandResult, Device, DeviceState, DeviceType, DiscoveredDevice
 from .routines import Routine, StateTrigger, TimeTrigger
 from .scenes import Scene, SceneAction, SceneResult
@@ -262,6 +263,11 @@ def create_app(hub: Hub | None = None, agent: HomeAgent | None = None) -> FastAP
     async def health(fresh: bool = False) -> HealthReport:
         """O que está atrapalhando a central e o que fazer. fresh=true consulta os estados de novo."""
         return await diagnose(_hub(), fresh=fresh)
+
+    @app.get("/network", response_model=NetworkView)
+    async def network(fresh: bool = False) -> NetworkView:
+        """Em que rede e IP cada aparelho está, visto da central. fresh=true busca as TVs de novo."""
+        return await network_view(_hub(), fresh=fresh)
 
     @app.get("/integrations", response_model=list[Integration])
     async def integrations() -> list[Integration]:

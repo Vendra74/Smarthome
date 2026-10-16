@@ -37,6 +37,7 @@ fabricante novo basta escrever um adaptador.
 | Cadastro | `src/smarthome/registry.py` | Lista de dispositivos com cômodo e apelidos, salva em YAML |
 | Cenas | `src/smarthome/scenes.py` | Cena = nome falado + lista de ações (aparelho, comando, parâmetros); o Hub executa, aparelhos em paralelo e ações do mesmo aparelho em ordem |
 | Diagnóstico | `src/smarthome/diagnostics.py` | Achados (gravidade, causa, ação) a partir de estados, erros recentes, rede local, contas, cenas e rotinas; alimenta /health, o aviso no app e a ferramenta `diagnose` do agente |
+| Rede | `src/smarthome/network.py` | Em que rede e IP cada aparelho está, visto da central (mesma rede, outra rede, só nuvem, TVs vistas sem cadastro); alimenta /network e o botão Rede do app |
 | Rotinas | `src/smarthome/routines.py` | Gatilho (horário com dias, ou estado de um aparelho com detecção de borda) que dispara uma cena; relógio em segundo plano a cada 30 s |
 | Hub | `src/smarthome/hub.py` | Valida e despacha comandos, descobre e cadastra dispositivos |
 | Adaptadores | `src/smarthome/adapters/` | SmartThings, LG ThinQ, TV Samsung, TV LG, virtual |

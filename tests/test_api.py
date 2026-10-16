@@ -190,3 +190,27 @@ def test_health_endpoint(hub, monkeypatch):
     with TestClient(create_app(hub=hub)) as client:
         report = client.get("/health", params={"fresh": "true"}).json()
         assert report["findings"] == [] and "checked_at" in report
+
+
+def test_network_view_groups_devices_by_network(hub, monkeypatch):
+    import asyncio
+    import ipaddress  # noqa: F401
+
+    from smarthome.adapters import samsung_lan
+    from smarthome.models import Device, DeviceType
+
+    monkeypatch.setattr(samsung_lan, "local_ip", lambda: "10.0.0.13")
+    hub.registry.add(Device(id="tv-lan", name="TV 85", type=DeviceType.TV, adapter="samsung_tv",
+                            config={"host": "10.0.0.19", "mac": "AA:BB"}))
+    hub.registry.add(Device(id="tv-longe", name="TV 50", type=DeviceType.TV, adapter="samsung_tv",
+                            config={"host": "192.168.0.30"}))
+    hub.registry.add(Device(id="ar", name="Ar", type=DeviceType.AC, adapter="lg_thinq", config={"device_id": "x"}))
+    stranger = {"host": "10.0.0.40", "name": "[TV] Samsung 7 Series (43)", "model": "", "mac": "CC", "power": False}
+    hub.recovery._scan = lambda: asyncio.sleep(0, result=[stranger])
+    with TestClient(create_app(hub=hub)) as client:
+        view = client.get("/network?fresh=true").json()
+    assert view["central_ip"] == "10.0.0.13" and view["central_network"] == "10.0.0.0/24"
+    where = {d["id"]: d["where"] for d in view["devices"]}
+    assert where["tv-lan"] == "central" and where["tv-longe"] == "other" and where["ar"] == "cloud"
+    assert view["seen_tvs"][0]["host"] == "10.0.0.40" and view["seen_tvs"][0]["device_id"] is None
+    assert view["scan_age_s"] is not None
