@@ -124,6 +124,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 }
 
 .card {
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -147,9 +148,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .controls { display: grid; gap: 10px; margin-top: 12px; }
 .controls:empty { display: none; }
 .control { display: flex; align-items: center; gap: 10px; font-size: .9rem; color: var(--muted); }
-.control > span:first-child { width: 96px; flex: none; }
-.control input[type="range"] { flex: 1; accent-color: var(--accent); }
-.control output { width: 42px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.control > span:first-child { width: 72px; flex: none; }
+/* min-width: 0 porque o range tem largura mínima própria e empurrava o número para fora do card */
+.control input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.control output { width: 36px; flex: none; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
 .stepper { display: flex; align-items: center; gap: 8px; }
 .stepper button { width: 36px; height: 36px; padding: 0; background: var(--surface-2); color: var(--text); }
 .stepper output { font-size: 1.1rem; min-width: 56px; text-align: center; }

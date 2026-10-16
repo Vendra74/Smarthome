@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import errno
+import html
 import ipaddress
 import logging
 import re
@@ -61,7 +62,8 @@ async def tv_info(host: str, timeout: float = 2.0) -> dict[str, Any] | None:
     device = data.get("device", {})
     return {
         "host": device.get("ip") or host,
-        "name": device.get("name") or data.get("name") or "",
+        # a TV devolve o nome com entidades HTML ("85&quot; Crystal UHD")
+        "name": html.unescape(device.get("name") or data.get("name") or ""),
         "model": device.get("modelName", ""),
         "mac": (device.get("wifiMac") or "").upper() or None,
         "power": device.get("PowerState", "on") == "on",
