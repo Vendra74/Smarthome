@@ -12,6 +12,7 @@ Ainda não testado com aparelho real.
 
 from __future__ import annotations
 
+import logging
 import ssl
 import uuid
 from typing import Any
@@ -19,6 +20,7 @@ from typing import Any
 from ..models import Command, Device, DeviceState, DeviceType, DiscoveredDevice
 from .base import Adapter, AdapterError
 
+log = logging.getLogger(__name__)
 AIR_CONDITIONER = "DEVICE_AIR_CONDITIONER"
 
 # Modos da central -> modos (job mode) do ar LG
@@ -116,13 +118,23 @@ class LGThinQAdapter(Adapter):
         try:
             return await self._execute_ac(device, ac, command, params)
         except AdapterError as exc:
-            if "COMMAND_NOT_SUPPORTED_IN_POWER_OFF" not in str(exc):
+            if "COMMAND_NOT_SUPPORTED_IN" not in str(exc):
                 raise
-            # A LG recusa qualquer comando com o ar desligado, inclusive "desligar".
-            # Se era desligar, está feito; se não, a pessoa precisa ligar antes.
-            if command == Command.TURN_OFF:
-                return await self._refresh(device, ac)
-            raise AdapterError(f"{device.name} está desligado; ligue-o antes de mudar temperatura ou modo") from exc
+            # A LG recusa "ligar" com o ar ligado e qualquer comando com o ar desligado,
+            # inclusive "desligar". Para ligar/desligar isso quer dizer que já estava assim;
+            # o estado que a nuvem informa pode estar atrasado, então vale o que a LG recusou.
+            state = await self._refresh(device, ac)
+            if command in (Command.TURN_ON, Command.TURN_OFF):
+                wanted = command == Command.TURN_ON
+                if state.power != wanted:
+                    log.warning(
+                        "LG ThinQ recusou %s de %s (%s), mas o status diz power=%s: estado da nuvem atrasado",
+                        command.value, device.id, str(exc).split(" - ")[-1], state.power,
+                    )
+                return state.model_copy(update={"power": wanted})
+            if not state.power:
+                raise AdapterError(f"{device.name} está desligado; ligue-o antes de mudar temperatura ou modo") from exc
+            raise
 
     async def _execute_ac(self, device: Device, ac: Any, command: Command, params: dict[str, Any]) -> DeviceState:
         if command == Command.TURN_ON:

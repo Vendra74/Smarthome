@@ -118,3 +118,17 @@ def test_turning_off_an_ac_already_off_is_a_success():
     assert state.power is False
     with pytest.raises(AdapterError, match="ligue-o antes"):
         asyncio.run(adapter.execute(device, Command.SET_TEMPERATURE, {"celsius": 22}))
+
+
+def test_turning_on_an_ac_already_on_is_a_success_even_if_status_lags():
+    import asyncio
+
+    adapter, ac, device = make()
+    ac.api.status["power"] = "POWER_OFF"  # a nuvem ainda diz desligado
+
+    async def refuse(value):
+        raise Exception("ThinQAPIException: COMMAND_NOT_SUPPORTED_IN_STATE (2302) - Command not supported in POWER_ON")
+
+    ac.set_air_con_operation_mode = refuse
+    state = asyncio.run(adapter.execute(device, Command.TURN_ON, {}))
+    assert state.power is True
